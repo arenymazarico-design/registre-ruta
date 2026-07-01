@@ -30,6 +30,7 @@ export async function ensure() {
     photo_url text,
     created_at timestamptz default now()
   )`;
+  await sql`alter table tickets add column if not exists accounted boolean default false`;
   await sql`create table if not exists app_config (
     id int primary key default 1,
     email text default '',

@@ -13,7 +13,8 @@ function rowToClient(r) {
     amount: Number(r.amount), ticket: r.ticket_no || '', place: r.place || '',
     date: (r.date instanceof Date ? r.date.toISOString().slice(0, 10) : String(r.date).slice(0, 10)),
     companions: r.companions || '', notes: r.notes || '',
-    photo: r.photo_url || null, createdAt: r.created_at ? new Date(r.created_at).getTime() : 0
+    photo: r.photo_url || null, accounted: !!r.accounted,
+    createdAt: r.created_at ? new Date(r.created_at).getTime() : 0
   };
 }
 
@@ -75,12 +76,22 @@ export default async (req) => {
       return json({ ok: true, id, emailed });
     }
 
-    // PUT: actualitzar tiquet (propietari o admin).
+    // PUT: actualitzar tiquet (propietari o admin), o marcar/desmarcar comptabilitzat (admin).
     if (req.method === 'PUT') {
       const b = await req.json();
       if (!b.id) return json({ error: 'Falta id' }, 400);
       const cur = (await sql`select * from tickets where id=${b.id}`)[0];
       if (!cur) return json({ error: 'No trobat' }, 404);
+
+      // Marcar/desmarcar com a comptabilitzat (només admin).
+      if (typeof b.setAccounted === 'boolean') {
+        if (me.role !== 'admin') return json({ error: 'Només administradors' }, 403);
+        await sql`update tickets set accounted=${b.setAccounted} where id=${b.id}`;
+        return json({ ok: true, id: b.id, accounted: b.setAccounted });
+      }
+
+      // Edició normal: bloquejada si està comptabilitzat.
+      if (cur.accounted) return json({ error: 'Tiquet comptabilitzat: bloquejat' }, 409);
       if (me.role !== 'admin' && cur.user_id !== me.uid) return json({ error: 'Sense permís' }, 403);
       let photoUrl = cur.photo_url;
       if (b.photoBase64) { await photos().set(b.id, b.photoBase64); photoUrl = '/api/photo?id=' + b.id; }
@@ -90,12 +101,13 @@ export default async (req) => {
       return json({ ok: true, id: b.id });
     }
 
-    // DELETE: eliminar tiquet (propietari o admin).
+    // DELETE: eliminar tiquet (propietari o admin), si no està comptabilitzat.
     if (req.method === 'DELETE') {
       const id = new URL(req.url).searchParams.get('id');
       if (!id) return json({ error: 'Falta id' }, 400);
       const cur = (await sql`select * from tickets where id=${id}`)[0];
       if (!cur) return json({ error: 'No trobat' }, 404);
+      if (cur.accounted) return json({ error: 'Tiquet comptabilitzat: no es pot eliminar' }, 409);
       if (me.role !== 'admin' && cur.user_id !== me.uid) return json({ error: 'Sense permís' }, 403);
       try { await photos().delete(id); } catch (e) { /* pot no tenir foto */ }
       await sql`delete from tickets where id=${id}`;

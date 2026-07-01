@@ -77,6 +77,11 @@
   .ticket .right{display:flex;flex-direction:column;align-items:flex-end;justify-content:center;padding:11px 13px;border-left:1px dashed var(--line);flex:0 0 auto}
   .ticket .amt{font-family:var(--mono);font-size:17px;font-weight:600;white-space:nowrap}
   .ticket .clip{font-size:11px;color:var(--muted);margin-top:3px}
+  .ticket.acct{opacity:.72}
+  .acctbadge{display:inline-block;font-size:9px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;background:#e3f0e6;color:#2f7a4a;padding:2px 7px;border-radius:6px;margin-left:8px}
+  .acctnote{font-size:13px;color:#2f7a4a;background:#eef6f0;border:1px solid #cfe6d6;border-radius:10px;padding:10px 12px;margin-bottom:12px;font-weight:600}
+  #acctRow{margin-bottom:6px}
+  #acctRow .btn-ghost{margin-bottom:10px}
 
   .empty{text-align:center;padding:56px 24px;color:var(--muted)}
   .empty .ic{font-size:40px;opacity:.5}
@@ -207,6 +212,7 @@
       <div class="field"><label for="place">Restaurant o empresa</label><input id="place" type="text" autocomplete="off" placeholder="Nom del comerç"></div>
       <div class="field" id="compWrap" style="display:none"><label for="companions">Acompanyants</label><input id="companions" type="text" autocomplete="off" placeholder="Qui més hi era"></div>
       <div class="field"><label for="notes">Observacions</label><textarea id="notes" placeholder="Notes (opcional)"></textarea></div>
+      <div id="acctRow"></div>
       <div class="actions"><button type="button" class="btn-danger" id="delBtn" style="display:none">Elimina</button><button type="submit" class="btn-primary" id="saveBtn">Desa el registre</button></div>
     </div>
   </form>

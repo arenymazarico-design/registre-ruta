@@ -169,8 +169,9 @@
         var sub = []; if (e.ticket) sub.push("#" + e.ticket); if (e.companions) sub.push("👥 " + e.companions);
         var extra = sub.length ? '<div class="extra">' + esc(sub.join("  ·  ")) + '</div>' : '';
         var whoTag = admin ? '<span class="who2">' + esc(e.user) + '</span>' : '';
-        return '<div class="ticket" data-id="' + e.id + '"><div class="bar" style="background:' + c.color + '"></div>' +
-          '<div class="body"><span class="cat" style="color:' + c.color + '">' + c.label + '</span>' + whoTag +
+        var acctTag = e.accounted ? '<span class="acctbadge">✓ comptabilitzat</span>' : '';
+        return '<div class="ticket' + (e.accounted ? ' acct' : '') + '" data-id="' + e.id + '"><div class="bar" style="background:' + c.color + '"></div>' +
+          '<div class="body"><span class="cat" style="color:' + c.color + '">' + c.label + '</span>' + whoTag + acctTag +
           '<div class="concept">' + esc(e.place || c.label) + '</div>' + extra + '</div>' +
           '<div class="right"><span class="amt">' + eur(e.amount) + '</span>' + (e.photo ? '<span class="clip">📎</span>' : '') + '</div></div>';
       }).join("");
@@ -347,7 +348,8 @@
     el("ticket").value = (parsed && parsed.ticket_number) ? parsed.ticket_number : "";
     el("place").value = (parsed && parsed.business_name) ? parsed.business_name : "";
     el("date").value = (parsed && parsed.date && /^\d{4}-\d{2}-\d{2}$/.test(parsed.date)) ? parsed.date : todayStr();
-    el("companions").value = ""; el("notes").value = ""; setThumb(pendingPhoto); openSheet_();
+    el("companions").value = ""; el("notes").value = ""; setThumb(pendingPhoto);
+    el("acctRow").innerHTML = ""; setLock(false); openSheet_();
   }
   function openSheet(id) {
     var e = entries.filter(function (x) { return x.id === id; })[0]; if (!e) return;
@@ -356,7 +358,37 @@
     el("amount").value = e.amount; el("ticket").value = e.ticket || ""; el("place").value = e.place || "";
     el("date").value = e.date; el("companions").value = e.companions || ""; el("notes").value = e.notes || "";
     pendingPhoto = e.photo || null; setThumb(pendingPhoto);
-    el("delBtn").style.display = (admin || e.userId === me.id) ? "block" : "none"; openSheet_();
+    el("delBtn").style.display = (admin || e.userId === me.id) ? "block" : "none";
+    renderAcct(e); openSheet_();
+  }
+
+  function setLock(locked) {
+    ["amount", "ticket", "date", "place", "companions", "notes"].forEach(function (id) { el(id).disabled = locked; });
+    document.querySelectorAll('input[name=cat]').forEach(function (r) { r.disabled = locked; });
+    el("retakeBtn").style.display = locked ? "none" : "";
+    el("saveBtn").style.display = locked ? "none" : "";
+    if (locked) el("delBtn").style.display = "none";
+  }
+  function renderAcct(e) {
+    var acct = el("acctRow");
+    if (e && e.accounted) {
+      setLock(true);
+      el("sheetTitle").textContent = "Registre comptabilitzat";
+      acct.innerHTML = '<div class="acctnote">🔒 Comptabilitzat — bloquejat: no es pot editar ni eliminar.</div>' +
+        (admin ? '<button type="button" class="btn-ghost" id="unacctBtn">Treure de comptabilitzat</button>' : '');
+      if (admin) el("unacctBtn").onclick = function () { toggleAccounted(e.id, false); };
+    } else {
+      setLock(false);
+      acct.innerHTML = (admin && e) ? '<button type="button" class="btn-ghost" id="acctBtn" style="border-color:#bcd9c4;color:#2f7a4a;margin-bottom:10px">✓ Marcar com a comptabilitzat</button>' : "";
+      if (admin && e) el("acctBtn").onclick = function () { toggleAccounted(e.id, true); };
+    }
+  }
+  async function toggleAccounted(id, val) {
+    try {
+      await api("/api/tickets", "PUT", { id: id, setAccounted: val });
+      await loadEntries(); closeSheet(); render();
+      toast(val ? "Marcat com a comptabilitzat" : "Desbloquejat");
+    } catch (e) { toast(e.message); }
   }
   function openSheet_() { el("scrim").setAttribute("data-open", "true"); el("sheet").setAttribute("data-open", "true"); }
   function closeSheet() { el("scrim").removeAttribute("data-open"); el("sheet").removeAttribute("data-open"); }
