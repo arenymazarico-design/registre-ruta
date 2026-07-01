@@ -1,6 +1,6 @@
 {
-  "name": "Registre de ruta",
-  "short_name": "Registre",
+  "name": "Dietes / Gastos",
+  "short_name": "Dietes",
   "description": "Registre de dietes, gastos, bàscules i peatges amb lectura de tiquets i enviament per correu.",
   "start_url": "/",
   "scope": "/",

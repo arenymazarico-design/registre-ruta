@@ -26,7 +26,7 @@ export default async (req) => {
         'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
+        model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6',
         max_tokens: 1000,
         messages: [{
           role: 'user',
@@ -37,7 +37,11 @@ export default async (req) => {
         }]
       })
     });
-    if (!r.ok) return json({ parsed: null, reason: 'api-' + r.status });
+    if (!r.ok) {
+      let detail = '';
+      try { const err = await r.json(); detail = (err && err.error && (err.error.message || err.error.type)) || ''; } catch (e) { }
+      return json({ parsed: null, reason: 'api-' + r.status + (detail ? ': ' + String(detail).slice(0, 80) : '') });
+    }
     const data = await r.json();
     let text = (data.content || []).filter((x) => x.type === 'text').map((x) => x.text).join('').trim();
     text = text.replace(/```json/gi, '').replace(/```/g, '').trim();

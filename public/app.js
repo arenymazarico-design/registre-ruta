@@ -69,7 +69,7 @@
 
   function renderBootstrap() {
     el("root").innerHTML =
-      '<div class="center"><div class="logo">Registre de ruta</div>' +
+      '<div class="center"><div class="logo">Dietes / Gastos</div>' +
       '<h2>Configura l\'administrador</h2>' +
       '<p>Encara no hi ha cap compte. Crea el primer administrador: podrà donar d\'alta la resta d\'usuaris i consultar totes les dades.</p>' +
       '<div class="field"><label for="bName">Nom</label><input id="bName" type="text" placeholder="Ex. Jordi Puig"></div>' +
@@ -102,7 +102,7 @@
       '<input id="lPin" type="tel" inputmode="numeric" maxlength="4" placeholder="••••"></div>' +
       '<button class="btn-primary" id="lGo" style="width:100%">Entrar</button>' : '';
     el("root").innerHTML =
-      '<div class="center"><div class="logo">Registre de ruta</div><h2>Inicia sessió</h2>' +
+      '<div class="center"><div class="logo">Dietes / Gastos</div><h2>Inicia sessió</h2>' +
       '<p>Tria el teu nom i introdueix el PIN.</p><div class="userlist">' + rows + '</div>' + pinBlock + '</div>';
     el("root").querySelectorAll(".userrow").forEach(function (b) {
       b.onclick = function () { loginTarget = b.getAttribute("data-id"); renderLogin(); setTimeout(function () { var i = el("lPin"); if (i) i.focus(); }, 50); };
@@ -132,7 +132,7 @@
       '<div class="wrap"><header>' +
       '<div class="brand"><div class="l" style="align-items:center;gap:10px">' +
       (cfg.logo ? '<img class="hdrlogo" src="' + cfg.logo + '" alt="logo">' : '') +
-      '<div style="display:flex;flex-direction:column"><h1>Registre</h1><span class="sub">' + (admin ? 'Panell d\'administrador' : 'despeses de ruta') + '</span></div></div>' +
+      '<div style="display:flex;flex-direction:column"><h1>DIETES / GASTOS</h1><span class="sub">' + (admin ? 'Panell d\'administrador' : 'despeses de ruta') + '</span></div></div>' +
       '<div class="who">' + (admin ? '<span class="adminbadge">ADMIN</span>' : '') + '<button class="avatar" id="avatarBtn">' + esc(initial(me.name)) + '</button></div></div>' +
       '<div class="monthbar"><button id="prevM">‹</button><div class="m">' + MONTHS[view.getMonth()] + ' ' + view.getFullYear() + '</div><button id="nextM">›</button></div>' +
       '<div class="total"><div class="big">' + eur(total) + '</div><div class="lbl">' + (admin ? 'Total de tots els usuaris' : 'El meu total del mes') + '</div></div>' +
@@ -326,9 +326,13 @@
   }
   async function runExtraction(dataUrl) {
     el("extractImg").src = dataUrl; el("extract").setAttribute("data-open", "true");
-    var parsed = null;
-    try { var r = await api("/api/extract", "POST", { imageBase64: dataUrl.split(",")[1], mediaType: "image/jpeg" }); parsed = r && r.parsed; } catch (e) { parsed = null; }
+    var parsed = null, reason = null;
+    try { var r = await api("/api/extract", "POST", { imageBase64: dataUrl.split(",")[1], mediaType: "image/jpeg" }); parsed = r && r.parsed; reason = r && r.reason; } catch (e) { reason = e.message; }
     el("extract").removeAttribute("data-open");
+    if (!parsed) {
+      if (reason === "no-key") toast("Falta la clau ANTHROPIC_API_KEY per llegir tiquets");
+      else if (reason) toast("No s'ha pogut llegir el tiquet (" + reason + ")");
+    }
     openSheetNew(parsed, !!parsed);
   }
 
@@ -450,6 +454,27 @@
   function openImg(src) { el("imgviewImg").src = src; el("imgview").setAttribute("data-open", "true"); }
   el("imgview").onclick = function () { this.removeAttribute("data-open"); };
   var toastT; function toast(msg) { var t = el("toast"); t.textContent = msg; t.setAttribute("data-show", "true"); clearTimeout(toastT); toastT = setTimeout(function () { t.removeAttribute("data-show"); }, 2200); }
+
+  // ---------- Instal·lar com a app ----------
+  var deferredPrompt = null;
+  function isStandalone() { return window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true; }
+  function showInstall(txt, canPrompt) {
+    if (isStandalone()) return;
+    if (localStorage.getItem("installDismissed") === "1") return;
+    el("installTxt").textContent = txt;
+    el("installBtn").style.display = canPrompt ? "" : "none";
+    el("installBar").setAttribute("data-show", "true");
+  }
+  function hideInstall() { el("installBar").removeAttribute("data-show"); }
+  window.addEventListener("beforeinstallprompt", function (e) { e.preventDefault(); deferredPrompt = e; showInstall("Instal·la aquesta app a la pantalla d'inici", true); });
+  window.addEventListener("appinstalled", function () { hideInstall(); });
+  el("installBtn").onclick = async function () { if (!deferredPrompt) return; deferredPrompt.prompt(); try { await deferredPrompt.userChoice; } catch (e) { } deferredPrompt = null; hideInstall(); };
+  el("installClose").onclick = function () { hideInstall(); localStorage.setItem("installDismissed", "1"); };
+  (function () {
+    var ua = navigator.userAgent || "";
+    var iOS = /iPad|iPhone|iPod/.test(ua) && !window.MSStream;
+    if (iOS && !isStandalone()) showInstall("Per instal·lar: toca Compartir i «Afegir a la pantalla d'inici»", false);
+  })();
 
   // ---------- Init ----------
   (async function () {
