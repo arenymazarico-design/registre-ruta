@@ -19,7 +19,6 @@ function rowToClient(r) {
 }
 
 async function sendEmail(rec, cfg) {
-  if (!cfg.email || !process.env.RESEND_API_KEY || !rec.photoBase64) return;
   const resend = new Resend(process.env.RESEND_API_KEY);
   const place = rec.place || CATS[rec.cat] || '';
   const subject = `${rec.userName} - ${rec.date} - ${place}`;
@@ -30,7 +29,7 @@ async function sendEmail(rec, cfg) {
     `Restaurant/Empresa: ${place}\nNúm. tiquet: ${rec.ticket_no || '-'}\nImport: ${amount} €` +
     (rec.cat === 'dietes' && rec.companions ? `\nAcompanyants: ${rec.companions}` : '') +
     (rec.notes ? `\nObservacions: ${rec.notes}` : '');
-  await resend.emails.send({
+  return await resend.emails.send({
     from: process.env.MAIL_FROM || 'Registre <onboarding@resend.dev>',
     to: cfg.email,
     subject,
@@ -64,16 +63,22 @@ export default async (req) => {
         values (${id},${me.uid},${me.name},${b.cat},${Number(b.amount)},${b.ticket_no || ''},${b.place || ''},
         ${b.date},${b.cat === 'dietes' ? (b.companions || '') : ''},${b.notes || ''},${photoUrl})`;
 
-      // enviament automàtic
+      // enviament automàtic (amb motiu si no s'envia)
       const cfg = (await sql`select email from app_config where id=1`)[0] || {};
-      let emailed = false;
-      if (b.photoBase64 && cfg.email) {
+      let emailed = false, emailReason = '';
+      if (!b.photoBase64) emailReason = 'sense foto';
+      else if (!cfg.email) emailReason = 'sense correu de destinació (posa\'l a Configuració)';
+      else if (!process.env.RESEND_API_KEY) emailReason = 'falta RESEND_API_KEY';
+      else {
         try {
-          await sendEmail({ ...b, userName: me.name }, cfg);
-          emailed = true;
-        } catch (e) { emailed = false; }
+          const result = await sendEmail({ ...b, userName: me.name }, cfg);
+          if (result && result.error) {
+            const er = result.error;
+            emailReason = 'Resend: ' + String(er.message || er.name || JSON.stringify(er)).slice(0, 140);
+          } else { emailed = true; }
+        } catch (e) { emailReason = 'error: ' + String(e).slice(0, 140); }
       }
-      return json({ ok: true, id, emailed });
+      return json({ ok: true, id, emailed, emailReason });
     }
 
     // PUT: actualitzar tiquet (propietari o admin), o marcar/desmarcar comptabilitzat (admin).

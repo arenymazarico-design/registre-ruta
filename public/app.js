@@ -423,7 +423,11 @@
       else res = await api("/api/tickets", "POST", payload);
       await loadEntries();
       pendingPhoto = null; closeSheet(); render();
-      toast(id ? "Registre actualitzat" : (res && res.emailed ? "Desat i enviat per correu" : "Registre desat"));
+      var okMsg;
+      if (id) okMsg = "Registre actualitzat";
+      else if (res && res.emailed) okMsg = "Desat i enviat per correu";
+      else okMsg = "Desat" + (res && res.emailReason ? " — correu no enviat: " + res.emailReason : "");
+      toast(okMsg);
     } catch (e) { toast(e.message); }
     saving = false; el("saveBtn").disabled = false; el("saveBtn").textContent = "Desa el registre";
   });
