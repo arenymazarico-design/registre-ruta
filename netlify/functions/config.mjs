@@ -8,14 +8,14 @@ export default async (req) => {
     if (!me) return json({ error: 'No autenticat' }, 401);
 
     if (req.method === 'GET') {
-      const c = (await sql`select email, color, logo from app_config where id=1`)[0] || {};
-      return json({ email: c.email || '', color: c.color || '', logo: c.logo || '' });
+      const c = (await sql`select email, color, logo, cif, names from app_config where id=1`)[0] || {};
+      return json({ email: c.email || '', color: c.color || '', logo: c.logo || '', cif: c.cif || '', names: c.names || '' });
     }
 
     if (req.method === 'POST') {
       if (me.role !== 'admin') return json({ error: 'Només administradors' }, 403);
-      const { email, color, logo } = await req.json();
-      await sql`update app_config set email=${email || ''}, color=${color || ''}, logo=${logo || ''} where id=1`;
+      const { email, color, logo, cif, names } = await req.json();
+      await sql`update app_config set email=${email || ''}, color=${color || ''}, logo=${logo || ''}, cif=${cif || ''}, names=${names || ''} where id=1`;
       return json({ ok: true });
     }
 
