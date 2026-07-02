@@ -8,7 +8,108 @@
     peatges: { label: "Peatges", color: "var(--c-peatges)" }
   };
   var CAT_KEYS = Object.keys(CATS);
-  var APP_VERSION = "2025-07-02 · usuaris-cercador";
+  var APP_VERSION = "2025-07-02 · idiomes";
+
+  // ---------- Idioma (català per defecte / castellà) ----------
+  var lang = localStorage.getItem("lang") || "ca";
+  function setLang(l) { if (l === lang) return; localStorage.setItem("lang", l); location.reload(); }
+  var ES = {
+    "Inicia sessió": "Inicia sesión", "Escriu el teu nom i el PIN.": "Escribe tu nombre y el PIN.",
+    "Nom": "Nombre", "El teu nom": "Tu nombre", "Entrar": "Entrar",
+    "Configura l'administrador": "Configura el administrador",
+    "Encara no hi ha cap compte. Crea el primer administrador: podrà donar d'alta la resta d'usuaris i consultar totes les dades.": "Todavía no hay ninguna cuenta. Crea el primer administrador: podrá dar de alta al resto de usuarios y consultar todos los datos.",
+    "PIN (4 dígits)": "PIN (4 dígitos)", "Crear administrador": "Crear administrador",
+    "despeses de ruta": "gastos de ruta", "Panell d'administrador": "Panel de administrador",
+    "El meu total del mes": "Mi total del mes", "Total de tots els usuaris": "Total de todos los usuarios",
+    "Dietes": "Dietas", "Gastos": "Gastos", "Bàscules": "Básculas", "Peatges": "Peajes",
+    "Fer foto del tiquet": "Hacer foto del ticket", "afegir sense foto": "añadir sin foto",
+    "Tots": "Todos", "Consulta": "Consulta",
+    "Cap registre aquest mes.": "Sin registros este mes.", "Toca": "Toca", "per començar.": "para empezar.",
+    "Gestionar usuaris": "Gestionar usuarios", "Configuració": "Configuración",
+    "Canviar contrasenya": "Cambiar contraseña", "Tancar sessió": "Cerrar sesión",
+    "Administrador": "Administrador", "Usuari": "Usuario",
+    "Revisar tiquet": "Revisar ticket", "Editar registre": "Editar registro", "Registre validat": "Registro validado",
+    "Dades llegides del tiquet. Repassa-les i completa el que falti.": "Datos leídos del ticket. Revísalos y completa lo que falte.",
+    "Foto del tiquet": "Foto del ticket", "Refer": "Rehacer", "Import": "Importe",
+    "Núm. tiquet": "Núm. ticket", "Núm. factura": "Núm. factura", "Data": "Fecha",
+    "Restaurant o empresa": "Restaurante o empresa", "Nom del comerç": "Nombre del comercio",
+    "Acompanyants (nombre de persones)": "Acompañantes (número de personas)",
+    "Observacions": "Observaciones", "Notes (opcional)": "Notas (opcional)",
+    "Desa el registre": "Guardar el registro", "Elimina": "Eliminar",
+    "🔒 Validat — bloquejat: no es pot editar ni eliminar.": "🔒 Validado — bloqueado: no se puede editar ni eliminar.",
+    "Treure de comptabilitzat": "Quitar validación", "Treure validació": "Quitar validación",
+    "✓ Marcar com a validat": "✓ Marcar como validado", "✓ validat": "✓ validado",
+    "Usuaris": "Usuarios", "Nou usuari": "Nuevo usuario", "Editar usuari": "Editar usuario",
+    "+ Nou usuari": "+ Nuevo usuario", "📄 Importar usuaris d'Excel": "📄 Importar usuarios de Excel",
+    "Rol": "Rol", "Deixa-ho buit per no canviar-lo": "Déjalo vacío para no cambiarlo",
+    "‹ Enrere": "‹ Atrás", "Desa": "Guardar", "Eliminar usuari": "Eliminar usuario",
+    "Correu de destinació": "Correo de destino",
+    "On s'enviaran les fotos dels tiquets en guardar-los.": "Donde se enviarán las fotos de los tickets al guardarlos.",
+    "CIF de l'empresa": "CIF de la empresa",
+    "Si en llegir un document hi ha CIF, es tractarà com a factura i s'agafarà el número de factura.": "Si al leer un documento hay CIF, se tratará como factura y se tomará el número de factura.",
+    "Color de l'app": "Color de la app", "Logo": "Logo", "Cap logo": "Sin logo",
+    "Pujar logo": "Subir logo", "Canviar": "Cambiar", "Treure": "Quitar",
+    "Noms per a acompanyants": "Nombres para acompañantes", "Un nom per línia": "Un nombre por línea",
+    "📄 Importar noms d'Excel": "📄 Importar nombres de Excel",
+    "Excel amb una columna de noms (la primera). S'afegiran als que ja hi ha.": "Excel con una columna de nombres (la primera). Se añadirán a los que ya hay.",
+    "Desa la configuració": "Guardar la configuración",
+    "Contrasenya actual": "Contraseña actual", "Contrasenya nova (4 dígits)": "Contraseña nueva (4 dígitos)",
+    "Desa la contrasenya": "Guardar la contraseña", "Tanca": "Cerrar",
+    "Usuaris (cerca i tria'n més d'un)": "Usuarios (busca y elige más de uno)", "Cerca usuari…": "Busca usuario…",
+    "Cap usuari": "Sin usuario", "Tipus de gasto (pots triar-ne més d'un)": "Tipo de gasto (puedes elegir más de uno)",
+    "Des de": "Desde", "Fins a": "Hasta", "Restaurant o empresa conté": "Restaurante o empresa contiene",
+    "Estat": "Estado", "Pendents": "Pendientes", "Validats": "Validados",
+    "Exportar a Excel": "Exportar a Excel",
+    "Registre desat": "Registro guardado", "Desat i enviat per correu": "Guardado y enviado por correo",
+    "Registre actualitzat": "Registro actualizado", "Registre eliminat": "Registro eliminado",
+    "Configuració desada": "Configuración guardada", "Contrasenya canviada": "Contraseña cambiada",
+    "Usuari creat": "Usuario creado", "Usuari actualitzat": "Usuario actualizado", "Usuari eliminat": "Usuario eliminado",
+    "Excel generat": "Excel generado", "CSV descarregat": "CSV descargado",
+    "Marcat com a validat": "Marcado como validado", "Validació treta": "Validación quitada",
+    "Administrador creat": "Administrador creado",
+    "No hi ha registres per exportar": "No hay registros para exportar",
+    "Escriu el teu nom": "Escribe tu nombre", "El PIN nou ha de tenir 4 dígits": "El PIN nuevo debe tener 4 dígitos",
+    "El PIN ha de tenir 4 dígits": "El PIN debe tener 4 dígitos", "Escriu el nom": "Escribe el nombre",
+    "Posa un import vàlid": "Pon un importe válido"
+  };
+  var translating = false;
+  function translateNode(node) {
+    if (lang !== "es") return;
+    if (node.nodeType === 3) {
+      var s = node.nodeValue, key = s.trim();
+      if (key && ES[key]) node.nodeValue = s.replace(key, ES[key]);
+      return;
+    }
+    if (node.nodeType === 1) {
+      var tag = node.tagName;
+      if (tag === "TEXTAREA" || tag === "INPUT" || tag === "SCRIPT" || tag === "STYLE") {
+        if (node.placeholder && ES[node.placeholder.trim()]) node.placeholder = ES[node.placeholder.trim()];
+        return;
+      }
+      if (node.placeholder && ES[node.placeholder.trim()]) node.placeholder = ES[node.placeholder.trim()];
+      for (var i = 0; i < node.childNodes.length; i++) translateNode(node.childNodes[i]);
+    }
+  }
+  function applyLang() {
+    if (lang !== "es") return;
+    translating = true;
+    translateNode(document.body);
+    translating = false;
+  }
+  function T(s) { return (lang === "es" && ES[s]) ? ES[s] : s; }
+  if (lang === "es" && typeof MutationObserver !== "undefined") {
+    var mo = new MutationObserver(function (muts) {
+      if (translating) return;
+      translating = true;
+      muts.forEach(function (m) {
+        if (m.type === "childList") { for (var i = 0; i < m.addedNodes.length; i++) translateNode(m.addedNodes[i]); }
+        else if (m.type === "characterData") translateNode(m.target);
+      });
+      translating = false;
+    });
+    try { mo.observe(document.body, { childList: true, subtree: true, characterData: true }); } catch (e) { }
+  }
+  if (lang === "es") applyLang();
   var MONTHS = ["gener", "febrer", "març", "abril", "maig", "juny", "juliol", "agost", "setembre", "octubre", "novembre", "desembre"];
   var DAYS = ["diumenge", "dilluns", "dimarts", "dimecres", "dijous", "divendres", "dissabte"];
 
@@ -87,7 +188,7 @@
 
   function renderBootstrap() {
     el("root").innerHTML =
-      '<div class="center"><div class="logo">Dietes / Gastos</div>' +
+      '<div class="center"><div class="logo" style="text-transform:none;font-size:22px">PLUgastos</div>' +
       '<h2>Configura l\'administrador</h2>' +
       '<p>Encara no hi ha cap compte. Crea el primer administrador: podrà donar d\'alta la resta d\'usuaris i consultar totes les dades.</p>' +
       '<div class="field"><label for="bName">Nom</label><input id="bName" type="text" placeholder="Ex. Jordi Puig"></div>' +
@@ -109,13 +210,17 @@
 
   function renderLogin() {
     el("root").innerHTML =
-      '<div class="center"><div class="logo">Dietes / Gastos</div><h2>Inicia sessió</h2>' +
+      '<div class="center"><div class="logo" style="text-transform:none;font-size:22px">PLUgastos</div><h2>Inicia sessió</h2>' +
       '<p>Escriu el teu nom i el PIN.</p>' +
       '<div class="field"><label for="lName">Nom</label><input id="lName" type="text" autocomplete="username" placeholder="El teu nom"></div>' +
       '<div class="field"><label for="lPin">PIN</label><input id="lPin" type="tel" inputmode="numeric" maxlength="4" placeholder="••••"></div>' +
-      '<button class="btn-primary" id="lGo" style="width:100%">Entrar</button></div>';
+      '<button class="btn-primary" id="lGo" style="width:auto;min-width:150px;padding:12px 30px;display:block;margin:2px auto 0">Entrar</button>' +
+      '<div style="display:flex;gap:8px;justify-content:center;margin-top:16px">' +
+      '<button type="button" class="langbtn" data-l="ca"' + (lang === "ca" ? ' data-active="true"' : '') + '>Català</button>' +
+      '<button type="button" class="langbtn" data-l="es"' + (lang === "es" ? ' data-active="true"' : '') + '>Castellano</button></div></div>';
     el("lGo").onclick = doLogin;
     el("lPin").addEventListener("keydown", function (e) { if (e.key === "Enter") doLogin(); });
+    el("root").querySelectorAll(".langbtn").forEach(function (b) { b.onclick = function () { setLang(b.getAttribute("data-l")); }; });
   }
   async function doLogin() {
     var name = (el("lName").value || "").trim();
@@ -140,7 +245,7 @@
       '<div class="wrap"><header>' +
       '<div class="brand"><div class="l" style="align-items:center;gap:10px">' +
       (cfg.logo ? '<img class="hdrlogo" src="' + cfg.logo + '" alt="logo">' : '') +
-      '<div style="display:flex;flex-direction:column"><h1>DIETES / GASTOS</h1><span class="sub">' + (admin ? 'Panell d\'administrador' : 'despeses de ruta') + '</span></div></div>' +
+      '<div style="display:flex;flex-direction:column"><h1 style="text-transform:none;letter-spacing:.01em">PLUgastos</h1><span class="sub">' + (admin ? 'Panell d\'administrador' : 'despeses de ruta') + '</span></div></div>' +
       '<div class="who">' + (admin ? '<span class="adminbadge">ADMIN</span>' : '') + '<button class="avatar" id="avatarBtn">' + esc(initial(me.name)) + '</button></div></div>' +
       '<div class="monthbar"><button id="prevM">‹</button><div class="m">' + MONTHS[view.getMonth()] + ' ' + view.getFullYear() + '</div><button id="nextM">›</button></div>' +
       '<div class="total"><div class="big">' + eur(total) + '</div><div class="lbl">' + (admin ? 'Total de tots els usuaris' : 'El meu total del mes') + '</div></div>' +
@@ -206,13 +311,17 @@
     if (admin) items += '<button class="mi" id="miConfig">Configuració</button>';
     items += '<button class="mi" id="miPin">Canviar contrasenya</button>';
     items += '<button class="mi danger" id="miLogout">Tancar sessió</button>';
-    items += '<div style="padding:10px 18px;font-size:11px;color:var(--muted);text-align:center">Versió ' + APP_VERSION + '</div>';
+    items += '<div style="display:flex;gap:8px;justify-content:center;padding:12px">' +
+      '<button type="button" class="langbtn" data-l="ca"' + (lang === "ca" ? ' data-active="true"' : '') + '>Català</button>' +
+      '<button type="button" class="langbtn" data-l="es"' + (lang === "es" ? ' data-active="true"' : '') + '>Castellano</button></div>';
+    items += '<div style="padding:2px 18px 12px;font-size:11px;color:var(--muted);text-align:center">Versió ' + APP_VERSION + '</div>';
     el("menuCard").innerHTML = '<div class="u"><b>' + esc(me.name) + '</b><span>' + (admin ? "Administrador" : "Usuari") + '</span></div>' + items;
     el("menu").setAttribute("data-open", "true");
     if (admin) el("miUsers").onclick = function () { closeMenu(); openUM(); };
     if (admin) el("miConfig").onclick = function () { closeMenu(); openCfg(); };
     el("miPin").onclick = function () { closeMenu(); openPin(); };
     el("miLogout").onclick = function () { closeMenu(); clearSession(); me = null; render(); };
+    el("menuCard").querySelectorAll(".langbtn").forEach(function (b) { b.onclick = function () { setLang(b.getAttribute("data-l")); }; });
   }
   function closeMenu() { el("menu").removeAttribute("data-open"); }
   el("menuBg").onclick = closeMenu;
@@ -745,5 +854,6 @@
       }
     }
     render();
+    if (lang === "es") applyLang();
   })();
 })();

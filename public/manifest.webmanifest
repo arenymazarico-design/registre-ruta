@@ -1,6 +1,6 @@
 {
-  "name": "Dietes / Gastos",
-  "short_name": "Dietes",
+  "name": "PLUgastos",
+  "short_name": "PLUgastos",
   "description": "Registre de dietes, gastos, bàscules i peatges amb lectura de tiquets i enviament per correu.",
   "start_url": "/",
   "scope": "/",
