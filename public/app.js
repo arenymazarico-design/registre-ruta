@@ -144,7 +144,7 @@
       '<div class="monthbar"><button id="prevM">‹</button><div class="m">' + MONTHS[view.getMonth()] + ' ' + view.getFullYear() + '</div><button id="nextM">›</button></div>' +
       '<div class="total"><div class="big">' + eur(total) + '</div><div class="lbl">' + (admin ? 'Total de tots els usuaris' : 'El meu total del mes') + '</div></div>' +
       '<div class="breakdown">' + bd + '</div></header>' + renderToolbar() + '<main id="list"></main></div>' +
-      '<div class="fabbar"><button class="fab" id="camBtn"><span class="cam">📷</span> Fer foto del tiquet</button><button class="nolink" id="manualBtn">afegir sense foto</button></div>';
+      '<div class="fabbar"><button class="fab" id="camBtn"><span class="cam">📷</span> Fer foto del tiquet</button>' + (admin ? '<button class="nolink" id="manualBtn">afegir sense foto</button>' : '') + '</div>';
 
     renderList(mes); bindMain();
   }
@@ -191,7 +191,7 @@
     el("prevM").onclick = function () { view.setMonth(view.getMonth() - 1); render(); };
     el("nextM").onclick = function () { view.setMonth(view.getMonth() + 1); render(); };
     el("camBtn").onclick = function () { retakeMode = false; pendingPhoto = null; el("photo").value = ""; el("photo").click(); };
-    el("manualBtn").onclick = function () { pendingPhoto = null; openSheetNew(null, false); };
+    var mb = el("manualBtn"); if (mb) mb.onclick = function () { pendingPhoto = null; openSheetNew(null, false); };
     el("avatarBtn").onclick = openMenu;
     el("openExp").onclick = openExport;
     el("root").querySelectorAll(".fc").forEach(function (c) { c.onclick = function () { filter = c.getAttribute("data-k"); render(); }; });
@@ -545,7 +545,7 @@
     } catch (e) {
       if (e && e.data && e.data.duplicate) {
         var of = e.data.of || {};
-        toast("Tiquet duplicat: ja registrat" + (of.user ? " per " + of.user : "") + (of.date ? " el " + String(of.date).slice(0, 10) : "") + ". No es desa.", { error: true, cross: true, ms: 5500 });
+        toast("Tiquet duplicat: ja registrat" + (of.user ? " per " + of.user : "") + (of.date ? " el " + String(of.date).slice(0, 10) : "") + ". No es desa.", { error: true, cross: true, ms: 7500 });
       } else toast(e.message, { error: true });
     }
     unlockBtn();
@@ -560,11 +560,11 @@
 
   // ---------- Export CSV ----------
   // ---------- Consulta (filtres + exportació) ----------
-  var q = { user: "tots", cat: "tots", from: "", to: "", text: "", acct: "tots" };
+  var q = { users: [], cats: [], from: "", to: "", text: "", acct: "tots" };
   function computeConsulta() {
     var list = entries.slice(); // admin: tots; usuari: només els seus
-    if (admin && q.user !== "tots") list = list.filter(function (e) { return e.userId === q.user; });
-    if (q.cat !== "tots") list = list.filter(function (e) { return e.cat === q.cat; });
+    if (admin && q.users.length) list = list.filter(function (e) { return q.users.indexOf(e.userId) >= 0; });
+    if (q.cats.length) list = list.filter(function (e) { return q.cats.indexOf(e.cat) >= 0; });
     if (q.from) list = list.filter(function (e) { return e.date >= q.from; });
     if (q.to) list = list.filter(function (e) { return e.date <= q.to; });
     if (q.text) { var t = q.text.toLowerCase(); list = list.filter(function (e) { return (e.place || "").toLowerCase().indexOf(t) >= 0; }); }
@@ -578,15 +578,23 @@
     var total = list.reduce(function (s, e) { return s + e.amount; }, 0);
     var elc = el("qCount"); if (elc) elc.textContent = list.length + (list.length === 1 ? " registre" : " registres") + " · " + eur(total);
   }
+  function chipStrip(items, selected, allLabel) {
+    var chips = '<button type="button" class="chip qchip" data-v="" data-active="' + (selected.length === 0) + '">' + allLabel + '</button>';
+    chips += items.map(function (it) {
+      return '<button type="button" class="chip qchip" data-v="' + esc(it.v) + '" data-active="' + (selected.indexOf(it.v) >= 0) + '">' + esc(it.label) + '</button>';
+    }).join("");
+    return '<div class="toolbar" style="position:static;border:0;padding:0 0 4px;gap:7px;flex-wrap:wrap">' + chips + '</div>';
+  }
   function renderConsulta() {
-    var userSel = admin ?
-      '<div class="field"><label for="qUser">Usuari</label><select id="qUser"><option value="tots">Tots els usuaris</option>' +
-      roster.map(function (u) { return '<option value="' + u.id + '"' + (q.user === u.id ? " selected" : "") + '>' + esc(u.name) + '</option>'; }).join("") + '</select></div>' : '';
-    var catSel = '<div class="field"><label for="qCat">Tipus de gasto</label><select id="qCat"><option value="tots">Tots</option>' +
-      CAT_KEYS.map(function (k) { return '<option value="' + k + '"' + (q.cat === k ? " selected" : "") + '>' + CATS[k].label + '</option>'; }).join("") + '</select></div>';
+    var userBlock = admin ?
+      '<label style="display:block;font-size:12px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--muted);margin-bottom:6px">Usuaris (pots triar-ne més d\'un)</label>' +
+      chipStrip(roster.map(function (u) { return { v: u.id, label: u.name }; }), q.users, "Tots") : '';
+    var catBlock =
+      '<label style="display:block;font-size:12px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--muted);margin:8px 0 6px">Tipus de gasto (pots triar-ne més d\'un)</label>' +
+      chipStrip(CAT_KEYS.map(function (k) { return { v: k, label: CATS[k].label }; }), q.cats, "Tots");
     el("expBody").innerHTML =
-      userSel + catSel +
-      '<div class="grid2"><div class="field"><label for="qFrom">Des de</label><input id="qFrom" type="date" value="' + esc(q.from) + '"></div>' +
+      userBlock + catBlock +
+      '<div class="grid2" style="margin-top:10px"><div class="field"><label for="qFrom">Des de</label><input id="qFrom" type="date" value="' + esc(q.from) + '"></div>' +
       '<div class="field"><label for="qTo">Fins a</label><input id="qTo" type="date" value="' + esc(q.to) + '"></div></div>' +
       '<div class="field"><label for="qText">Restaurant o empresa conté</label><input id="qText" type="text" value="' + esc(q.text) + '" placeholder="(opcional)"></div>' +
       '<div class="field"><label for="qAcct">Estat</label><select id="qAcct">' +
@@ -596,8 +604,25 @@
       '<div style="text-align:center;font-weight:700;font-size:15px;margin:6px 0 14px" id="qCount">—</div>' +
       '<div class="actions"><button type="button" class="btn-primary" id="qXls">Exportar a Excel</button>' +
       '<button type="button" class="btn-danger" id="qCsv" style="border-color:var(--line);color:var(--ink-soft)">CSV</button></div>';
-    function bind(id, prop) { var e = el(id); if (e) e.onchange = function () { q[prop] = e.value; updateConsultaSummary(); }; }
-    bind("qUser", "user"); bind("qCat", "cat"); bind("qFrom", "from"); bind("qTo", "to"); bind("qAcct", "acct");
+    // chips: toggle multi-selecció (buit = tots)
+    el("expBody").querySelectorAll(".qchip").forEach(function (c) {
+      c.onclick = function () {
+        var v = c.getAttribute("data-v");
+        var grp = c.parentNode;
+        var strips = el("expBody").querySelectorAll(".toolbar");
+        var isUserStrip = admin && grp === strips[0];
+        var arr = isUserStrip ? q.users : q.cats;
+        if (v === "") { arr.length = 0; }
+        else { var i = arr.indexOf(v); if (i >= 0) arr.splice(i, 1); else arr.push(v); }
+        grp.querySelectorAll(".qchip").forEach(function (x) {
+          var xv = x.getAttribute("data-v");
+          x.setAttribute("data-active", xv === "" ? (arr.length === 0) : (arr.indexOf(xv) >= 0));
+        });
+        updateConsultaSummary();
+      };
+    });
+    var bindQ = function (id, prop) { var e = el(id); if (e) e.onchange = function () { q[prop] = e.value; updateConsultaSummary(); }; };
+    bindQ("qFrom", "from"); bindQ("qTo", "to"); bindQ("qAcct", "acct");
     var qt = el("qText"); if (qt) qt.oninput = function () { q.text = qt.value; updateConsultaSummary(); };
     el("qXls").onclick = exportXlsx;
     el("qCsv").onclick = exportCsv;
@@ -617,6 +642,12 @@
     if (typeof XLSX === "undefined") { toast("No s'ha pogut carregar l'exportador"); return; }
     var list = computeConsulta();
     if (!list.length) { toast("No hi ha registres per exportar"); return; }
+    // Preguntem ABANS d'exportar (així funciona igual a PC i mòbil).
+    var pend = admin ? list.filter(function (e) { return !e.accounted; }).map(function (e) { return e.id; }) : [];
+    var doLock = false;
+    if (pend.length) {
+      doLock = confirm("S'exportaran " + list.length + " registres.\n\nVols marcar-los com a VALIDATS? Quedaran bloquejats i els usuaris ja no els podran modificar. (" + pend.length + " pendents)");
+    }
     var d = consultaRows();
     var ws = XLSX.utils.aoa_to_sheet([d.header].concat(d.rows));
     ws["!cols"] = [{ wch: 11 }, { wch: 18 }, { wch: 16 }, { wch: 14 }, { wch: 12 }, { wch: 24 }, { wch: 10 }, { wch: 22 }, { wch: 26 }];
@@ -624,16 +655,12 @@
     XLSX.utils.book_append_sheet(wb, ws, "Consulta");
     XLSX.writeFile(wb, "consulta.xlsx");
     toast("Excel generat");
-    // Marcar com a validats (bloquejats) els registres exportats — només admin.
-    if (admin) {
-      var pend = list.filter(function (e) { return !e.accounted; }).map(function (e) { return e.id; });
-      if (pend.length && confirm("S'han exportat " + list.length + " registres.\n\nVols marcar-los com a VALIDATS? Quedaran bloquejats i els usuaris ja no els podran modificar. (" + pend.length + " pendents)")) {
-        try {
-          await api("/api/tickets", "PUT", { validateIds: pend });
-          await loadEntries(); updateConsultaSummary(); render();
-          toast(pend.length + " registres validats");
-        } catch (e) { toast(e.message); }
-      }
+    if (doLock && pend.length) {
+      try {
+        await api("/api/tickets", "PUT", { validateIds: pend });
+        await loadEntries(); updateConsultaSummary(); render();
+        toast(pend.length + " registres validats");
+      } catch (e) { toast(e.message, { error: true }); }
     }
   }
   function exportCsv() {
@@ -660,7 +687,7 @@
     t.innerHTML = (opts.cross ? '<span class="xmark">✕</span>' : '') + esc(msg);
     t.setAttribute("data-show", "true");
     clearTimeout(toastT);
-    toastT = setTimeout(function () { t.removeAttribute("data-show"); }, opts.ms || 3500);
+    toastT = setTimeout(function () { t.removeAttribute("data-show"); }, opts.ms || 5500);
   }
 
   // ---------- Instal·lar com a app ----------
