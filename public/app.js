@@ -157,7 +157,7 @@
       userSel = '<select id="userFilter" class="chip" style="appearance:auto"><option value="tots"' + (userFilter === "tots" ? " selected" : "") + '>Tots els usuaris</option>' +
         roster.map(function (u) { return '<option value="' + u.id + '"' + (userFilter === u.id ? " selected" : "") + '>' + esc(u.name) + '</option>'; }).join("") + '</select>';
     }
-    return '<div class="toolbar">' + chips + '<span class="spacer"></span>' + userSel + '<button class="expbtn" id="openExp">⇩ CSV</button></div>';
+    return '<div class="toolbar">' + chips + '<span class="spacer"></span>' + userSel + '<button class="expbtn" id="openExp">Consulta</button></div>';
   }
 
   function renderList(mes) {
@@ -559,20 +559,84 @@
   };
 
   // ---------- Export CSV ----------
-  function buildCsv() {
-    var mes = visibleEntries().slice();
-    if (filter !== "tots") mes = mes.filter(function (e) { return e.cat === filter; });
-    if (admin && userFilter !== "tots") mes = mes.filter(function (e) { return e.userId === userFilter; });
-    mes.sort(function (a, b) { return a.date < b.date ? -1 : 1; });
-    var head = ["Data", "Usuari", "Categoria", "Restaurant/Empresa", "Num tiquet", "Acompanyants", "Observacions", "Import"];
-    var rows = mes.map(function (e) { return [e.date, e.user, CATS[e.cat] ? CATS[e.cat].label : e.cat, e.place || "", e.ticket || "", e.companions || "", e.notes || "", e.amount.toFixed(2).replace(".", ",")]; });
-    return [head].concat(rows).map(function (r) { return r.map(function (c) { c = String(c); return /[",;\n]/.test(c) ? '"' + c.replace(/"/g, '""') + '"' : c; }).join(";"); }).join("\n");
+  // ---------- Consulta (filtres + exportació) ----------
+  var q = { user: "tots", cat: "tots", from: "", to: "", text: "", acct: "tots" };
+  function computeConsulta() {
+    var list = entries.slice(); // admin: tots; usuari: només els seus
+    if (admin && q.user !== "tots") list = list.filter(function (e) { return e.userId === q.user; });
+    if (q.cat !== "tots") list = list.filter(function (e) { return e.cat === q.cat; });
+    if (q.from) list = list.filter(function (e) { return e.date >= q.from; });
+    if (q.to) list = list.filter(function (e) { return e.date <= q.to; });
+    if (q.text) { var t = q.text.toLowerCase(); list = list.filter(function (e) { return (e.place || "").toLowerCase().indexOf(t) >= 0; }); }
+    if (q.acct === "si") list = list.filter(function (e) { return e.accounted; });
+    if (q.acct === "no") list = list.filter(function (e) { return !e.accounted; });
+    list.sort(function (a, b) { return a.date < b.date ? -1 : (a.date > b.date ? 1 : 0); });
+    return list;
   }
-  function openExport() { el("csvText").value = buildCsv(); el("expScrim").setAttribute("data-open", "true"); el("expSheet").setAttribute("data-open", "true"); }
+  function updateConsultaSummary() {
+    var list = computeConsulta();
+    var total = list.reduce(function (s, e) { return s + e.amount; }, 0);
+    var elc = el("qCount"); if (elc) elc.textContent = list.length + (list.length === 1 ? " registre" : " registres") + " · " + eur(total);
+  }
+  function renderConsulta() {
+    var userSel = admin ?
+      '<div class="field"><label for="qUser">Usuari</label><select id="qUser"><option value="tots">Tots els usuaris</option>' +
+      roster.map(function (u) { return '<option value="' + u.id + '"' + (q.user === u.id ? " selected" : "") + '>' + esc(u.name) + '</option>'; }).join("") + '</select></div>' : '';
+    var catSel = '<div class="field"><label for="qCat">Tipus de gasto</label><select id="qCat"><option value="tots">Tots</option>' +
+      CAT_KEYS.map(function (k) { return '<option value="' + k + '"' + (q.cat === k ? " selected" : "") + '>' + CATS[k].label + '</option>'; }).join("") + '</select></div>';
+    el("expBody").innerHTML =
+      userSel + catSel +
+      '<div class="grid2"><div class="field"><label for="qFrom">Des de</label><input id="qFrom" type="date" value="' + esc(q.from) + '"></div>' +
+      '<div class="field"><label for="qTo">Fins a</label><input id="qTo" type="date" value="' + esc(q.to) + '"></div></div>' +
+      '<div class="field"><label for="qText">Restaurant o empresa conté</label><input id="qText" type="text" value="' + esc(q.text) + '" placeholder="(opcional)"></div>' +
+      '<div class="field"><label for="qAcct">Estat</label><select id="qAcct">' +
+      '<option value="tots"' + (q.acct === "tots" ? " selected" : "") + '>Tots</option>' +
+      '<option value="no"' + (q.acct === "no" ? " selected" : "") + '>Pendents</option>' +
+      '<option value="si"' + (q.acct === "si" ? " selected" : "") + '>Comptabilitzats</option></select></div>' +
+      '<div style="text-align:center;font-weight:700;font-size:15px;margin:6px 0 14px" id="qCount">—</div>' +
+      '<div class="actions"><button type="button" class="btn-primary" id="qXls">Exportar a Excel</button>' +
+      '<button type="button" class="btn-danger" id="qCsv" style="border-color:var(--line);color:var(--ink-soft)">CSV</button></div>';
+    function bind(id, prop) { var e = el(id); if (e) e.onchange = function () { q[prop] = e.value; updateConsultaSummary(); }; }
+    bind("qUser", "user"); bind("qCat", "cat"); bind("qFrom", "from"); bind("qTo", "to"); bind("qAcct", "acct");
+    var qt = el("qText"); if (qt) qt.oninput = function () { q.text = qt.value; updateConsultaSummary(); };
+    el("qXls").onclick = exportXlsx;
+    el("qCsv").onclick = exportCsv;
+    updateConsultaSummary();
+  }
+  function consultaRows() {
+    var list = computeConsulta();
+    var header = ["Data", "Usuari", "Número de factura", "Número tiquet", "Tipus de gasto", "Restaurant/Proveïdor", "Import", "Acompanyants", "Observacions"];
+    var rows = list.map(function (e) {
+      var factura = e.cif ? (e.ticket || "") : "";
+      var tiquet = e.cif ? "" : (e.ticket || "");
+      return [e.date, e.user, factura, tiquet, CATS[e.cat] ? CATS[e.cat].label : e.cat, e.place || "", Number(e.amount), e.companions || "", e.notes || ""];
+    });
+    return { header: header, rows: rows };
+  }
+  function exportXlsx() {
+    if (typeof XLSX === "undefined") { toast("No s'ha pogut carregar l'exportador"); return; }
+    var d = consultaRows();
+    var ws = XLSX.utils.aoa_to_sheet([d.header].concat(d.rows));
+    ws["!cols"] = [{ wch: 11 }, { wch: 18 }, { wch: 16 }, { wch: 14 }, { wch: 12 }, { wch: 24 }, { wch: 10 }, { wch: 22 }, { wch: 26 }];
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Consulta");
+    XLSX.writeFile(wb, "consulta.xlsx");
+    toast("Excel generat");
+  }
+  function exportCsv() {
+    var d = consultaRows();
+    var csv = [d.header].concat(d.rows).map(function (r) {
+      return r.map(function (c) { c = String(c); return /[",;\n]/.test(c) ? '"' + c.replace(/"/g, '""') + '"' : c; }).join(";");
+    }).join("\n");
+    try {
+      var blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
+      var a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "consulta.csv";
+      document.body.appendChild(a); a.click(); a.remove(); toast("CSV descarregat");
+    } catch (e) { toast("No s'ha pogut descarregar"); }
+  }
+  function openExport() { renderConsulta(); el("expScrim").setAttribute("data-open", "true"); el("expSheet").setAttribute("data-open", "true"); }
   function closeExport() { el("expScrim").removeAttribute("data-open"); el("expSheet").removeAttribute("data-open"); }
   el("closeExp").onclick = closeExport; el("expScrim").onclick = closeExport;
-  el("copyCsv").onclick = function () { var ta = el("csvText"); ta.select(); try { if (navigator.clipboard) navigator.clipboard.writeText(ta.value); else document.execCommand("copy"); toast("CSV copiat"); } catch (e) { document.execCommand("copy"); toast("CSV copiat"); } };
-  el("dlCsv").onclick = function () { try { var blob = new Blob(["\uFEFF" + el("csvText").value], { type: "text/csv;charset=utf-8" }); var a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "registre-" + ym(view) + ".csv"; document.body.appendChild(a); a.click(); a.remove(); toast("Descarregant…"); } catch (e) { toast("Copia el text manualment"); } };
 
   function openImg(src) { el("imgviewImg").src = src; el("imgview").setAttribute("data-open", "true"); }
   el("imgview").onclick = function () { this.removeAttribute("data-open"); };
