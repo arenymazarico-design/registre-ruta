@@ -77,7 +77,7 @@
     if (lang !== "es") return;
     if (node.nodeType === 3) {
       var s = node.nodeValue, key = s.trim();
-      if (key && ES[key]) node.nodeValue = s.replace(key, ES[key]);
+      if (key && ES[key] && ES[key] !== key) node.nodeValue = s.replace(key, ES[key]);
       return;
     }
     if (node.nodeType === 1) {
@@ -93,7 +93,7 @@
   function applyLang() {
     if (lang !== "es") return;
     translating = true;
-    translateNode(document.body);
+    try { translateNode(document.body); } catch (e) { }
     translating = false;
   }
   function T(s) { return (lang === "es" && ES[s]) ? ES[s] : s; }
@@ -101,15 +101,17 @@
     var mo = new MutationObserver(function (muts) {
       if (translating) return;
       translating = true;
-      muts.forEach(function (m) {
-        if (m.type === "childList") { for (var i = 0; i < m.addedNodes.length; i++) translateNode(m.addedNodes[i]); }
-        else if (m.type === "characterData") translateNode(m.target);
-      });
+      try {
+        muts.forEach(function (m) {
+          if (m.type === "childList") { for (var i = 0; i < m.addedNodes.length; i++) translateNode(m.addedNodes[i]); }
+          else if (m.type === "characterData") translateNode(m.target);
+        });
+      } catch (e) { }
       translating = false;
     });
     try { mo.observe(document.body, { childList: true, subtree: true, characterData: true }); } catch (e) { }
   }
-  if (lang === "es") applyLang();
+  try { if (lang === "es") applyLang(); } catch (e) { }
   var MONTHS = ["gener", "febrer", "març", "abril", "maig", "juny", "juliol", "agost", "setembre", "octubre", "novembre", "desembre"];
   var DAYS = ["diumenge", "dilluns", "dimarts", "dimecres", "dijous", "divendres", "dissabte"];
 
@@ -214,7 +216,7 @@
       '<p>Escriu el teu nom i el PIN.</p>' +
       '<div class="field"><label for="lName">Nom</label><input id="lName" type="text" autocomplete="username" placeholder="El teu nom"></div>' +
       '<div class="field"><label for="lPin">PIN</label><input id="lPin" type="tel" inputmode="numeric" maxlength="4" placeholder="••••"></div>' +
-      '<button class="btn-primary" id="lGo" style="width:auto;min-width:150px;padding:12px 30px;display:block;margin:2px auto 0">Entrar</button>' +
+      '<button class="btn-primary" id="lGo" style="width:auto;min-width:150px;padding:9px 30px;font-size:15px;display:block;margin:2px auto 0">Entrar</button>' +
       '<div style="display:flex;gap:8px;justify-content:center;margin-top:16px">' +
       '<button type="button" class="langbtn" data-l="ca"' + (lang === "ca" ? ' data-active="true"' : '') + '>Català</button>' +
       '<button type="button" class="langbtn" data-l="es"' + (lang === "es" ? ' data-active="true"' : '') + '>Castellano</button></div></div>';
