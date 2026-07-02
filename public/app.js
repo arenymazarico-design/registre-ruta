@@ -8,7 +8,7 @@
     peatges: { label: "Peatges", color: "var(--c-peatges)" }
   };
   var CAT_KEYS = Object.keys(CATS);
-  var APP_VERSION = "2025-07-02 · consulta-multi";
+  var APP_VERSION = "2025-07-02 · usuaris-cercador";
   var MONTHS = ["gener", "febrer", "març", "abril", "maig", "juny", "juliol", "agost", "setembre", "octubre", "novembre", "desembre"];
   var DAYS = ["diumenge", "dilluns", "dimarts", "dimecres", "dijous", "divendres", "dissabte"];
 
@@ -563,6 +563,25 @@
   // ---------- Export CSV ----------
   // ---------- Consulta (filtres + exportació) ----------
   var q = { users: [], cats: [], from: "", to: "", text: "", acct: "tots" };
+  var qUserQuery = "";
+  function userName(id) { var u = roster.filter(function (x) { return x.id === id; })[0]; return u ? u.name : id; }
+  function refreshUserMsel() {
+    var tags = el("qUserTags"), list = el("qUserList");
+    if (!tags || !list) return;
+    tags.innerHTML = q.users.map(function (id) { return '<span class="mtag">' + esc(userName(id)) + '<b data-rem="' + id + '">✕</b></span>'; }).join("");
+    var term = (qUserQuery || "").toLowerCase();
+    var opts = roster.filter(function (u) { return u.name.toLowerCase().indexOf(term) >= 0; });
+    list.innerHTML = opts.length ? opts.map(function (u) {
+      var sel = q.users.indexOf(u.id) >= 0;
+      return '<div class="msel-opt" data-id="' + u.id + '" data-sel="' + sel + '"><span class="ck">' + (sel ? "✓" : "") + '</span>' + esc(u.name) + '</div>';
+    }).join("") : '<div class="msel-empty">Cap usuari</div>';
+    tags.querySelectorAll("[data-rem]").forEach(function (b) {
+      b.onclick = function () { var id = b.getAttribute("data-rem"); var i = q.users.indexOf(id); if (i >= 0) q.users.splice(i, 1); refreshUserMsel(); updateConsultaSummary(); };
+    });
+    list.querySelectorAll(".msel-opt").forEach(function (o) {
+      o.onclick = function () { var id = o.getAttribute("data-id"); var i = q.users.indexOf(id); if (i >= 0) q.users.splice(i, 1); else q.users.push(id); refreshUserMsel(); updateConsultaSummary(); };
+    });
+  }
   function computeConsulta() {
     var list = entries.slice(); // admin: tots; usuari: només els seus
     if (admin && q.users.length) list = list.filter(function (e) { return q.users.indexOf(e.userId) >= 0; });
@@ -588,11 +607,12 @@
     return '<div class="toolbar" style="position:static;border:0;padding:0 0 4px;gap:7px;flex-wrap:wrap">' + chips + '</div>';
   }
   function renderConsulta() {
+    qUserQuery = "";
     var userBlock = admin ?
-      '<label style="display:block;font-size:12px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--muted);margin-bottom:6px">Usuaris (pots triar-ne més d\'un)</label>' +
-      chipStrip(roster.map(function (u) { return { v: u.id, label: u.name }; }), q.users, "Tots") : '';
+      '<label style="display:block;font-size:12px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--muted);margin-bottom:6px">Usuaris (cerca i tria\'n més d\'un)</label>' +
+      '<div class="msel"><div class="msel-tags" id="qUserTags"></div><input id="qUserSearch" type="text" placeholder="Cerca usuari…" autocomplete="off"><div class="msel-list" id="qUserList"></div></div>' : '';
     var catBlock =
-      '<label style="display:block;font-size:12px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--muted);margin:8px 0 6px">Tipus de gasto (pots triar-ne més d\'un)</label>' +
+      '<label style="display:block;font-size:12px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--muted);margin:12px 0 6px">Tipus de gasto (pots triar-ne més d\'un)</label>' +
       chipStrip(CAT_KEYS.map(function (k) { return { v: k, label: CATS[k].label }; }), q.cats, "Tots");
     el("expBody").innerHTML =
       userBlock + catBlock +
@@ -606,28 +626,26 @@
       '<div style="text-align:center;font-weight:700;font-size:15px;margin:6px 0 14px" id="qCount">—</div>' +
       '<div class="actions"><button type="button" class="btn-primary" id="qXls">Exportar a Excel</button>' +
       '<button type="button" class="btn-danger" id="qCsv" style="border-color:var(--line);color:var(--ink-soft)">CSV</button></div>';
-    // chips: toggle multi-selecció (buit = tots)
+    // categoria: pastilles multi-selecció (buit = totes)
     el("expBody").querySelectorAll(".qchip").forEach(function (c) {
       c.onclick = function () {
         var v = c.getAttribute("data-v");
-        var grp = c.parentNode;
-        var strips = el("expBody").querySelectorAll(".toolbar");
-        var isUserStrip = admin && grp === strips[0];
-        var arr = isUserStrip ? q.users : q.cats;
-        if (v === "") { arr.length = 0; }
-        else { var i = arr.indexOf(v); if (i >= 0) arr.splice(i, 1); else arr.push(v); }
-        grp.querySelectorAll(".qchip").forEach(function (x) {
+        if (v === "") { q.cats.length = 0; }
+        else { var i = q.cats.indexOf(v); if (i >= 0) q.cats.splice(i, 1); else q.cats.push(v); }
+        c.parentNode.querySelectorAll(".qchip").forEach(function (x) {
           var xv = x.getAttribute("data-v");
-          x.setAttribute("data-active", xv === "" ? (arr.length === 0) : (arr.indexOf(xv) >= 0));
+          x.setAttribute("data-active", xv === "" ? (q.cats.length === 0) : (q.cats.indexOf(xv) >= 0));
         });
         updateConsultaSummary();
       };
     });
+    var us = el("qUserSearch"); if (us) us.oninput = function () { qUserQuery = us.value; refreshUserMsel(); };
     var bindQ = function (id, prop) { var e = el(id); if (e) e.onchange = function () { q[prop] = e.value; updateConsultaSummary(); }; };
     bindQ("qFrom", "from"); bindQ("qTo", "to"); bindQ("qAcct", "acct");
     var qt = el("qText"); if (qt) qt.oninput = function () { q.text = qt.value; updateConsultaSummary(); };
     el("qXls").onclick = exportXlsx;
     el("qCsv").onclick = exportCsv;
+    refreshUserMsel();
     updateConsultaSummary();
   }
   function consultaRows() {
