@@ -216,8 +216,8 @@
       '<p>Escriu el teu nom i el PIN.</p>' +
       '<div class="field"><label for="lName">Nom</label><input id="lName" type="text" autocomplete="username" placeholder="El teu nom"></div>' +
       '<div class="field"><label for="lPin">PIN</label><input id="lPin" type="tel" inputmode="numeric" maxlength="4" placeholder="••••"></div>' +
-      '<button class="btn-primary" id="lGo" style="width:auto;min-width:150px;padding:9px 30px;font-size:15px;display:block;margin:2px auto 0">Entrar</button>' +
-      '<div style="display:flex;gap:8px;justify-content:center;margin-top:16px">' +
+      '<button class="btn-primary" id="lGo" style="width:auto;min-width:110px;padding:9px 22px;font-size:15px;display:block;margin:2px auto 0">Entrar</button>' +
+      '<div style="display:flex;gap:8px;justify-content:center;margin-top:10px">' +
       '<button type="button" class="langbtn" data-l="ca"' + (lang === "ca" ? ' data-active="true"' : '') + '>Català</button>' +
       '<button type="button" class="langbtn" data-l="es"' + (lang === "es" ? ' data-active="true"' : '') + '>Castellano</button></div></div>';
     el("lGo").onclick = doLogin;
