@@ -10,7 +10,7 @@ function photos() { return getStore('ticket-photos'); }
 function rowToClient(r) {
   return {
     id: r.id, userId: r.user_id, user: r.user_name, cat: r.cat,
-    amount: Number(r.amount), ticket: r.ticket_no || '', place: r.place || '',
+    amount: Number(r.amount), ticket: r.ticket_no || '', place: r.place || '', cif: r.cif || '',
     date: (r.date instanceof Date ? r.date.toISOString().slice(0, 10) : String(r.date).slice(0, 10)),
     companions: r.companions || '', notes: r.notes || '',
     photo: r.photo_url || null, accounted: !!r.accounted,
@@ -56,11 +56,30 @@ export default async (req) => {
     if (req.method === 'POST') {
       const b = await req.json();
       if (b.amount == null || isNaN(Number(b.amount))) return json({ error: 'Import no vàlid' }, 400);
+
+      // Detecció de duplicats (entre tots els usuaris): mateixa data + proveïdor + número.
+      // Si en troba un, es bloqueja el desat.
+      {
+        const place = (b.place || '').trim();
+        const num = (b.ticket_no || '').trim();
+        if (place || num) {
+          const dups = await sql`select user_name, date, place, ticket_no from tickets
+            where date = ${b.date}
+            and lower(coalesce(place,'')) = lower(${place})
+            and coalesce(ticket_no,'') = ${num}
+            limit 1`;
+          if (dups.length) {
+            const d = dups[0];
+            return json({ duplicate: true, of: { user: d.user_name, date: d.date, place: d.place, ticket: d.ticket_no } }, 409);
+          }
+        }
+      }
+
       const id = uid();
       let photoUrl = null;
       if (b.photoBase64) { await photos().set(id, b.photoBase64); photoUrl = '/api/photo?id=' + id; }
-      await sql`insert into tickets (id,user_id,user_name,cat,amount,ticket_no,place,date,companions,notes,photo_url)
-        values (${id},${me.uid},${me.name},${b.cat},${Number(b.amount)},${b.ticket_no || ''},${b.place || ''},
+      await sql`insert into tickets (id,user_id,user_name,cat,amount,ticket_no,place,cif,date,companions,notes,photo_url)
+        values (${id},${me.uid},${me.name},${b.cat},${Number(b.amount)},${b.ticket_no || ''},${b.place || ''},${b.cif || ''},
         ${b.date},${b.cat === 'dietes' ? (b.companions || '') : ''},${b.notes || ''},${photoUrl})`;
 
       // enviament automàtic (amb motiu si no s'envia)
@@ -101,7 +120,7 @@ export default async (req) => {
       let photoUrl = cur.photo_url;
       if (b.photoBase64) { await photos().set(b.id, b.photoBase64); photoUrl = '/api/photo?id=' + b.id; }
       await sql`update tickets set cat=${b.cat}, amount=${Number(b.amount)}, ticket_no=${b.ticket_no || ''},
-        place=${b.place || ''}, date=${b.date}, companions=${b.cat === 'dietes' ? (b.companions || '') : ''},
+        place=${b.place || ''}, cif=${b.cif || ''}, date=${b.date}, companions=${b.cat === 'dietes' ? (b.companions || '') : ''},
         notes=${b.notes || ''}, photo_url=${photoUrl} where id=${b.id}`;
       return json({ ok: true, id: b.id });
     }

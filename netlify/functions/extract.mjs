@@ -1,10 +1,13 @@
 import { auth, json } from './_auth.mjs';
 
 const PROMPT =
-  "Estàs llegint la foto d'un tiquet o rebut (probablement en català o castellà). " +
+  "Estàs llegint la foto d'un tiquet, rebut o factura (probablement en català o castellà). " +
   "Respon NOMÉS amb un objecte JSON, sense text ni marques de codi, amb aquestes claus: " +
-  '{"date":"YYYY-MM-DD" o null,"ticket_number":string o null,"amount":number (total a pagar, decimal amb punt) o null,' +
+  '{"date":"YYYY-MM-DD" o null,"ticket_number":string o null,"invoice_number":string o null,' +
+  '"cif":string o null,"amount":number (total a pagar, decimal amb punt) o null,' +
   '"business_name":string o null,"category":un de "dietes","gastos","bascules","peatges" o null}. ' +
+  "El camp cif és el NIF/CIF fiscal que aparegui al document (format espanyol, ex. B12345678 o 12345678Z). " +
+  "Si el document és una factura (hi surt un CIF i un número de factura), omple invoice_number; si és un simple tiquet, omple ticket_number. " +
   "Dates en format dia/mes/any i decimals amb coma. Retorna com a amount el TOTAL final. " +
   "Restaurant o bar => dietes; peatge d'autopista => peatges; pesatge/bàscula => bascules; altrament gastos. Si no pots llegir un camp, null.";
 
@@ -15,8 +18,9 @@ export default async (req) => {
     if (!me) return json({ error: 'No autenticat' }, 401);
     if (!process.env.ANTHROPIC_API_KEY) return json({ parsed: null, reason: 'no-key' });
 
-    const { imageBase64, mediaType } = await req.json();
+    const { imageBase64, mediaType, companyCif } = await req.json();
     if (!imageBase64) return json({ error: 'Falta la imatge' }, 400);
+    const promptText = PROMPT + (companyCif ? (" El CIF de referència de l'empresa és " + companyCif + ".") : "");
 
     const r = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -32,7 +36,7 @@ export default async (req) => {
           role: 'user',
           content: [
             { type: 'image', source: { type: 'base64', media_type: mediaType || 'image/jpeg', data: imageBase64 } },
-            { type: 'text', text: PROMPT }
+            { type: 'text', text: promptText }
           ]
         }]
       })

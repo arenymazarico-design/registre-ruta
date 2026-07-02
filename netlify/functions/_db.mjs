@@ -16,6 +16,7 @@ export async function ensure() {
     pin_hash text not null,
     created_at timestamptz default now()
   )`;
+  await sql`alter table users add column if not exists pin_plain text`;
   await sql`create table if not exists tickets (
     id text primary key,
     user_id text,
@@ -31,12 +32,15 @@ export async function ensure() {
     created_at timestamptz default now()
   )`;
   await sql`alter table tickets add column if not exists accounted boolean default false`;
+  await sql`alter table tickets add column if not exists cif text`;
   await sql`create table if not exists app_config (
     id int primary key default 1,
     email text default '',
     color text default '',
     logo text default ''
   )`;
+  await sql`alter table app_config add column if not exists cif text default ''`;
+  await sql`alter table app_config add column if not exists names text default ''`;
   await sql`insert into app_config (id) values (1) on conflict (id) do nothing`;
   ensured = true;
 }

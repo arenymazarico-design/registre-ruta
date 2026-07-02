@@ -16,12 +16,13 @@
   var me = null, admin = false;
   var roster = [];            // {id,name,role} per a login
   var entries = [];
-  var cfg = { email: "", color: "", logo: "" };
+  var cfg = { email: "", color: "", logo: "", cif: "", names: [] };
   var view = new Date(); view.setDate(1);
   var filter = "tots", userFilter = "tots";
   var pendingPhoto = null;    // dataURL nova, o URL existent, o null
   var retakeMode = false;
   var loginTarget = null;
+  var noUsers = false;
   var selectedCat = "dietes";
   var saving = false;
 
@@ -34,7 +35,7 @@
     var res = await fetch(path, { method: method || "GET", headers: headers, body: bodyObj ? JSON.stringify(bodyObj) : undefined });
     var data = null; try { data = await res.json(); } catch (e) { }
     if (res.status === 401) { clearSession(); me = null; }
-    if (!res.ok) throw new Error((data && data.error) || ("Error " + res.status));
+    if (!res.ok) { var err = new Error((data && data.error) || ("Error " + res.status)); err.status = res.status; err.data = data; throw err; }
     return data;
   }
 
@@ -52,6 +53,22 @@
 
   async function loadEntries() { var r = await api("/api/tickets"); entries = r.tickets || []; }
   async function loadRoster() { try { var r = await api("/api/users"); roster = r.users || []; } catch (e) { roster = []; } }
+  function normalizeCfg(c) {
+    cfg.email = c.email || ""; cfg.color = c.color || ""; cfg.logo = c.logo || ""; cfg.cif = c.cif || "";
+    var names = [];
+    if (c.names) { try { names = JSON.parse(c.names); } catch (e) { names = String(c.names).split(/[\n,;]+/); } }
+    cfg.names = (names || []).map(function (x) { return String(x).trim(); }).filter(Boolean);
+  }
+  function allNames() {
+    var set = {}, out = [];
+    roster.forEach(function (u) { if (u.name && !set[u.name.toLowerCase()]) { set[u.name.toLowerCase()] = 1; out.push(u.name); } });
+    cfg.names.forEach(function (n) { if (n && !set[n.toLowerCase()]) { set[n.toLowerCase()] = 1; out.push(n); } });
+    return out.sort(function (a, b) { return a.localeCompare(b); });
+  }
+  function fillNamesDatalist() {
+    var dl = el("namesList"); if (!dl) return;
+    dl.innerHTML = allNames().map(function (n) { return '<option value="' + esc(n) + '"></option>'; }).join("");
+  }
 
   function visibleEntries() {
     var key = ym(view);
@@ -63,7 +80,7 @@
   // ================= RENDER =================
   function render() {
     admin = !!(me && me.role === "admin");
-    if (!me) { if (roster.length === 0) renderBootstrap(); else renderLogin(); return; }
+    if (!me) { if (noUsers) renderBootstrap(); else renderLogin(); return; }
     renderApp();
   }
 
@@ -83,40 +100,30 @@
         var r = await api("/api/users", "POST", { name: n, pin: p });
         var lg = await api("/api/login", "POST", { userId: r.id, pin: p });
         me = lg.user; setSession(lg.token, me);
-        cfg = await api("/api/config"); applyTheme(); await loadRoster(); await loadEntries();
+        normalizeCfg(await api("/api/config")); applyTheme(); await loadRoster(); fillNamesDatalist(); await loadEntries();
         render(); toast("Administrador creat");
       } catch (e) { toast(e.message); }
     };
   }
 
   function renderLogin() {
-    var rows = roster.map(function (u) {
-      return '<button class="userrow" data-id="' + u.id + '" data-sel="' + (loginTarget === u.id) + '">' +
-        '<span class="ava">' + esc(initial(u.name)) + '</span>' +
-        '<span class="un"><b>' + esc(u.name) + '</b><span>' + (u.role === "admin" ? "Administrador" : "Usuari") + '</span></span>' +
-        '<span class="rolechip ' + (u.role === "admin" ? "adm" : "usr") + '">' + (u.role === "admin" ? "admin" : "usuari") + '</span></button>';
-    }).join("");
-    var target = roster.filter(function (u) { return u.id === loginTarget; })[0];
-    var pinBlock = loginTarget ?
-      '<div class="field"><label for="lPin">PIN de ' + esc(target ? target.name : "") + '</label>' +
-      '<input id="lPin" type="tel" inputmode="numeric" maxlength="4" placeholder="••••"></div>' +
-      '<button class="btn-primary" id="lGo" style="width:100%">Entrar</button>' : '';
     el("root").innerHTML =
       '<div class="center"><div class="logo">Dietes / Gastos</div><h2>Inicia sessió</h2>' +
-      '<p>Tria el teu nom i introdueix el PIN.</p><div class="userlist">' + rows + '</div>' + pinBlock + '</div>';
-    el("root").querySelectorAll(".userrow").forEach(function (b) {
-      b.onclick = function () { loginTarget = b.getAttribute("data-id"); renderLogin(); setTimeout(function () { var i = el("lPin"); if (i) i.focus(); }, 50); };
-    });
-    var go = el("lGo");
-    if (go) { go.onclick = doLogin; el("lPin").addEventListener("keydown", function (e) { if (e.key === "Enter") doLogin(); }); }
+      '<p>Escriu el teu nom i el PIN.</p>' +
+      '<div class="field"><label for="lName">Nom</label><input id="lName" type="text" autocomplete="username" placeholder="El teu nom"></div>' +
+      '<div class="field"><label for="lPin">PIN</label><input id="lPin" type="tel" inputmode="numeric" maxlength="4" placeholder="••••"></div>' +
+      '<button class="btn-primary" id="lGo" style="width:100%">Entrar</button></div>';
+    el("lGo").onclick = doLogin;
+    el("lPin").addEventListener("keydown", function (e) { if (e.key === "Enter") doLogin(); });
   }
   async function doLogin() {
-    var t = roster.filter(function (u) { return u.id === loginTarget; })[0];
-    if (!t) return;
+    var name = (el("lName").value || "").trim();
+    var pin = (el("lPin").value || "").trim();
+    if (!name) { toast("Escriu el teu nom"); return; }
     try {
-      var lg = await api("/api/login", "POST", { userId: t.id, pin: (el("lPin").value || "").trim() });
-      me = lg.user; setSession(lg.token, me); loginTarget = null; filter = "tots"; userFilter = "tots";
-      cfg = await api("/api/config"); applyTheme(); await loadEntries();
+      var lg = await api("/api/login", "POST", { name: name, pin: pin });
+      me = lg.user; setSession(lg.token, me); filter = "tots"; userFilter = "tots";
+      normalizeCfg(await api("/api/config")); applyTheme(); await loadRoster(); fillNamesDatalist(); await loadEntries();
       render(); toast("Hola, " + me.name.split(" ")[0]);
     } catch (e) { toast(e.message); }
   }
@@ -196,15 +203,28 @@
     var items = "";
     if (admin) items += '<button class="mi" id="miUsers">Gestionar usuaris</button>';
     if (admin) items += '<button class="mi" id="miConfig">Configuració</button>';
+    items += '<button class="mi" id="miPin">Canviar contrasenya</button>';
     items += '<button class="mi danger" id="miLogout">Tancar sessió</button>';
     el("menuCard").innerHTML = '<div class="u"><b>' + esc(me.name) + '</b><span>' + (admin ? "Administrador" : "Usuari") + '</span></div>' + items;
     el("menu").setAttribute("data-open", "true");
     if (admin) el("miUsers").onclick = function () { closeMenu(); openUM(); };
     if (admin) el("miConfig").onclick = function () { closeMenu(); openCfg(); };
+    el("miPin").onclick = function () { closeMenu(); openPin(); };
     el("miLogout").onclick = function () { closeMenu(); clearSession(); me = null; render(); };
   }
   function closeMenu() { el("menu").removeAttribute("data-open"); }
   el("menuBg").onclick = closeMenu;
+
+  // ---------- Canviar la pròpia contrasenya ----------
+  function openPin() { el("oldPin").value = ""; el("newPin").value = ""; el("pinScrim").setAttribute("data-open", "true"); el("pinSheet").setAttribute("data-open", "true"); }
+  function closePin() { el("pinScrim").removeAttribute("data-open"); el("pinSheet").removeAttribute("data-open"); }
+  el("closePin").onclick = closePin; el("pinScrim").onclick = closePin;
+  el("pinSave").onclick = async function () {
+    var oldPin = el("oldPin").value.trim(), newPin = el("newPin").value.trim();
+    if (!/^\d{4}$/.test(newPin)) { toast("El PIN nou ha de tenir 4 dígits"); return; }
+    try { await api("/api/users", "POST", { changePin: true, oldPin: oldPin, newPin: newPin }); closePin(); toast("Contrasenya canviada"); }
+    catch (e) { toast(e.message); }
+  };
 
   // ---------- Gestió d'usuaris ----------
   function openUM() { renderUMList(); el("umScrim").setAttribute("data-open", "true"); el("umSheet").setAttribute("data-open", "true"); }
@@ -214,13 +234,41 @@
   function renderUMList() {
     el("umTitle").textContent = "Usuaris (" + roster.length + ")";
     var rows = roster.map(function (u) {
+      var pinTxt = (u.pin ? "PIN " + esc(u.pin) : (u.role === "admin" ? "Administrador" : "Usuari"));
       return '<div class="umrow" data-id="' + u.id + '"><span class="ava">' + esc(initial(u.name)) + '</span>' +
-        '<span class="un"><b>' + esc(u.name) + '</b><span>' + (u.role === "admin" ? "Administrador" : "Usuari") + '</span></span>' +
+        '<span class="un"><b>' + esc(u.name) + '</b><span>' + pinTxt + '</span></span>' +
         '<span class="rolechip ' + (u.role === "admin" ? "adm" : "usr") + '">' + (u.role === "admin" ? "admin" : "usuari") + '</span></div>';
     }).join("");
-    el("umBody").innerHTML = '<div class="umlist">' + rows + '</div><button class="btn-primary" id="umAdd" style="width:100%">+ Nou usuari</button>';
+    el("umBody").innerHTML = '<div class="umlist">' + rows + '</div>' +
+      '<button class="btn-primary" id="umAdd" style="width:100%;margin-bottom:10px">+ Nou usuari</button>' +
+      '<label class="btn-ghost" for="umXls" style="display:block;text-align:center;cursor:pointer">📄 Importar usuaris d\'Excel</label>' +
+      '<input id="umXls" type="file" accept=".xlsx,.xls,.csv" style="display:none">' +
+      '<p style="font-size:12px;color:var(--muted);margin-top:8px">Excel amb columnes: <b>Nom</b>, <b>PIN</b> (4 dígits) i, opcionalment, <b>Rol</b> (usuari/admin). La primera fila pot ser de títols.</p>';
     el("umBody").querySelectorAll(".umrow").forEach(function (r) { r.onclick = function () { renderUMEdit(r.getAttribute("data-id")); }; });
     el("umAdd").onclick = function () { renderUMEdit(null); };
+    el("umXls").onchange = function (ev) { var f = ev.target.files && ev.target.files[0]; if (f) importUsers(f); ev.target.value = ""; };
+  }
+
+  function importUsers(file) {
+    readSheet(file, async function (rows) {
+      if (!rows || !rows.length) { toast("No s'ha pogut llegir l'Excel"); return; }
+      var bulk = [];
+      rows.forEach(function (r, i) {
+        var name = (r[0] == null ? "" : String(r[0])).trim();
+        var pin = (r[1] == null ? "" : String(r[1])).trim();
+        var role = (r[2] == null ? "" : String(r[2])).trim().toLowerCase();
+        // salta la fila de títols si sembla capçalera
+        if (i === 0 && /nom|name/i.test(name) && !/^\d{4}$/.test(pin)) return;
+        if (!name) return;
+        bulk.push({ name: name, pin: pin, role: (role === "admin" || role === "administrador") ? "admin" : "user" });
+      });
+      if (!bulk.length) { toast("Cap fila vàlida a l'Excel"); return; }
+      try {
+        var res = await api("/api/users", "POST", { bulk: bulk });
+        await loadRoster(); fillNamesDatalist(); renderUMList();
+        toast("Importats: " + res.created + " · omesos: " + res.skipped);
+      } catch (e) { toast(e.message); }
+    });
   }
 
   function renderUMEdit(id) {
@@ -232,7 +280,7 @@
       '<label style="display:block;font-size:12px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--muted);margin-bottom:6px">Rol</label>' +
       '<div class="roles"><label><input type="radio" name="urole" value="user"' + (role === "user" ? " checked" : "") + '><div class="opt">Usuari</div></label>' +
       '<label><input type="radio" name="urole" value="admin"' + (role === "admin" ? " checked" : "") + '><div class="opt">Administrador</div></label></div>' +
-      '<div class="field"><label for="uPin">PIN (4 dígits)</label><input id="uPin" type="tel" inputmode="numeric" maxlength="4" placeholder="' + (u ? "Deixa-ho buit per no canviar-lo" : "••••") + '"></div>' +
+      '<div class="field"><label for="uPin">PIN (4 dígits)</label><input id="uPin" type="tel" inputmode="numeric" maxlength="4" value="' + (u && u.pin ? esc(u.pin) : "") + '" placeholder="' + (u ? "Deixa-ho buit per no canviar-lo" : "••••") + '"></div>' +
       '<div class="actions"><button type="button" class="btn-ghost" id="uBack" style="flex:0 0 auto;width:auto;padding:14px 18px">‹ Enrere</button><button type="button" class="btn-primary" id="uSave">Desa</button></div>' +
       (u ? '<button type="button" class="btn-danger" id="uDel" style="width:100%;margin-top:10px">Eliminar usuari</button>' : '');
     el("uBack").onclick = renderUMList;
@@ -287,16 +335,42 @@
     el("cfgBody").innerHTML =
       '<div class="field"><label for="cEmail">Correu de destinació</label><input id="cEmail" type="email" placeholder="comptabilitat@empresa.com" value="' + esc(cfg.email) + '"></div>' +
       '<p style="font-size:12px;color:var(--muted);margin:-4px 0 12px">On s\'enviaran les fotos dels tiquets en guardar-los.</p>' +
+      '<div class="field"><label for="cCif">CIF de l\'empresa</label><input id="cCif" type="text" placeholder="Ex. B12345678" value="' + esc(cfg.cif) + '"></div>' +
+      '<p style="font-size:12px;color:var(--muted);margin:-4px 0 12px">Si en llegir un document hi ha CIF, es tractarà com a factura i s\'agafarà el número de factura.</p>' +
       '<label style="display:block;font-size:12px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--muted);margin-bottom:6px">Color de l\'app</label>' +
       '<div class="swatches">' + swatches + '<input id="cColor" type="color" value="' + esc(cfgColorTmp) + '" style="width:40px;height:34px;border:1px solid var(--line);border-radius:8px;background:none;cursor:pointer;padding:2px"></div>' +
       '<label style="display:block;font-size:12px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--muted);margin:2px 0 6px">Logo</label>' +
       '<div class="logobox">' + logoBoxHtml() + '</div>' +
-      '<button type="button" class="btn-primary" id="cSave" style="width:100%;margin-top:6px">Desa la configuració</button>';
+      '<label style="display:block;font-size:12px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--muted);margin:2px 0 6px">Noms per a acompanyants</label>' +
+      '<textarea id="cNames" placeholder="Un nom per línia" style="width:100%;min-height:90px;border:1.5px solid var(--line);border-radius:11px;padding:12px;font-size:15px;font-family:var(--sans)">' + esc(cfg.names.join("\n")) + '</textarea>' +
+      '<label class="btn-ghost" for="cNamesXls" style="display:block;text-align:center;cursor:pointer;margin:8px 0 4px">📄 Importar noms d\'Excel</label>' +
+      '<input id="cNamesXls" type="file" accept=".xlsx,.xls,.csv" style="display:none">' +
+      '<p style="font-size:12px;color:var(--muted);margin:4px 0 14px">Excel amb una columna de noms (la primera). S\'afegiran als que ja hi ha.</p>' +
+      '<button type="button" class="btn-primary" id="cSave" style="width:100%;margin-top:2px">Desa la configuració</button>';
     el("cfgBody").querySelectorAll(".swatch").forEach(function (s) {
       s.onclick = function () { cfgColorTmp = s.getAttribute("data-c"); el("cColor").value = cfgColorTmp; el("cfgBody").querySelectorAll(".swatch").forEach(function (x) { x.setAttribute("data-sel", String(x.getAttribute("data-c").toLowerCase() === cfgColorTmp.toLowerCase())); }); };
     });
     el("cColor").oninput = function () { cfgColorTmp = el("cColor").value; el("cfgBody").querySelectorAll(".swatch").forEach(function (x) { x.setAttribute("data-sel", "false"); }); };
     bindLogo();
+    el("cNamesXls").onchange = function (ev) {
+      var f = ev.target.files && ev.target.files[0]; ev.target.value = "";
+      if (!f) return;
+      readSheet(f, function (rows) {
+        if (!rows) { toast("No s'ha pogut llegir l'Excel"); return; }
+        var got = [];
+        rows.forEach(function (r, i) {
+          var n = (r[0] == null ? "" : String(r[0])).trim();
+          if (i === 0 && /nom|name/i.test(n)) return;
+          if (n) got.push(n);
+        });
+        var ta = el("cNames");
+        var cur = ta.value.split("\n").map(function (x) { return x.trim(); }).filter(Boolean);
+        var seen = {}; var merged = [];
+        cur.concat(got).forEach(function (n) { if (!seen[n.toLowerCase()]) { seen[n.toLowerCase()] = 1; merged.push(n); } });
+        ta.value = merged.join("\n");
+        toast("Afegits " + got.length + " noms");
+      });
+    };
     el("cSave").onclick = saveCfg;
   }
   function compressLogo(file, cb) {
@@ -306,8 +380,12 @@
   }
   async function saveCfg() {
     cfg.email = el("cEmail").value.trim(); cfg.color = cfgColorTmp || ""; cfg.logo = cfgLogoTmp || "";
-    try { await api("/api/config", "POST", cfg); applyTheme(); closeCfg(); render(); toast("Configuració desada"); }
-    catch (e) { toast(e.message); }
+    cfg.cif = el("cCif").value.trim();
+    cfg.names = el("cNames").value.split("\n").map(function (x) { return x.trim(); }).filter(Boolean);
+    try {
+      await api("/api/config", "POST", { email: cfg.email, color: cfg.color, logo: cfg.logo, cif: cfg.cif, names: JSON.stringify(cfg.names) });
+      applyTheme(); fillNamesDatalist(); closeCfg(); render(); toast("Configuració desada");
+    } catch (e) { toast(e.message); }
   }
 
   // ---------- Foto + extracció ----------
@@ -319,6 +397,19 @@
       pendingPhoto = dataUrl; runExtraction(dataUrl);
     });
   });
+  function readSheet(file, cb) {
+    var reader = new FileReader();
+    reader.onload = function () {
+      try {
+        if (typeof XLSX === "undefined") { cb(null); return; }
+        var wb = XLSX.read(new Uint8Array(reader.result), { type: "array" });
+        var ws = wb.Sheets[wb.SheetNames[0]];
+        cb(XLSX.utils.sheet_to_json(ws, { header: 1, raw: false }));
+      } catch (e) { cb(null); }
+    };
+    reader.onerror = function () { cb(null); };
+    reader.readAsArrayBuffer(file);
+  }
   function compress(file, cb) {
     var reader = new FileReader();
     reader.onload = function () { var img = new Image(); img.onload = function () { var max = 1100, w = img.width, h = img.height; if (w > h && w > max) { h = Math.round(h * max / w); w = max; } else if (h >= w && h > max) { w = Math.round(w * max / h); h = max; } var cv = document.createElement("canvas"); cv.width = w; cv.height = h; cv.getContext("2d").drawImage(img, 0, 0, w, h); cb(cv.toDataURL("image/jpeg", 0.62)); }; img.onerror = function () { cb(null); }; img.src = reader.result; };
@@ -327,7 +418,7 @@
   async function runExtraction(dataUrl) {
     el("extractImg").src = dataUrl; el("extract").setAttribute("data-open", "true");
     var parsed = null, reason = null;
-    try { var r = await api("/api/extract", "POST", { imageBase64: dataUrl.split(",")[1], mediaType: "image/jpeg" }); parsed = r && r.parsed; reason = r && r.reason; } catch (e) { reason = e.message; }
+    try { var r = await api("/api/extract", "POST", { imageBase64: dataUrl.split(",")[1], mediaType: "image/jpeg", companyCif: cfg.cif || "" }); parsed = r && r.parsed; reason = r && r.reason; } catch (e) { reason = e.message; }
     el("extract").removeAttribute("data-open");
     if (!parsed) {
       if (reason === "no-key") toast("Falta la clau ANTHROPIC_API_KEY per llegir tiquets");
@@ -343,16 +434,34 @@
   }
   function toggleCompanions() { el("compWrap").style.display = (selectedCat === "dietes") ? "block" : "none"; }
   function setThumb(src) { if (src) { el("thumbImg").src = src; el("thumbrow").style.display = "flex"; } else el("thumbrow").style.display = "none"; }
+  function setNumberMode(isFactura) { el("ticketLbl").textContent = isFactura ? "Núm. factura" : "Núm. tiquet"; }
+  function renderCompRows(n, values) {
+    n = Math.max(0, Math.min(30, n || 0));
+    var html = "";
+    for (var i = 0; i < n; i++) {
+      var v = (values && values[i]) ? esc(values[i]) : "";
+      html += '<input class="compName" type="text" list="namesList" autocomplete="off" placeholder="Acompanyant ' + (i + 1) + '" value="' + v + '" style="width:100%;border:1.5px solid var(--line);background:var(--card);border-radius:11px;padding:12px 14px;font-size:16px">';
+    }
+    el("compList").innerHTML = html;
+  }
+  function readCompValues() { return Array.prototype.map.call(el("compList").querySelectorAll(".compName"), function (i) { return i.value.trim(); }); }
+  function getCompanions() { return readCompValues().filter(Boolean).join(", "); }
+  function setCompanionsFromString(s) {
+    var list = (s || "").split(",").map(function (x) { return x.trim(); }).filter(Boolean);
+    el("compCount").value = list.length; renderCompRows(list.length, list);
+  }
 
   function openSheetNew(parsed, fromAI) {
     el("entryForm").reset(); el("editId").value = ""; el("delBtn").style.display = "none";
     el("sheetTitle").textContent = "Revisar tiquet"; el("aiHint").style.display = fromAI ? "flex" : "none";
     selectedCat = (parsed && CATS[parsed.category]) ? parsed.category : "dietes"; renderCatPick(); toggleCompanions();
     el("amount").value = (parsed && parsed.amount != null) ? parsed.amount : "";
-    el("ticket").value = (parsed && parsed.ticket_number) ? parsed.ticket_number : "";
+    var cifVal = (parsed && parsed.cif) ? parsed.cif : "";
+    el("ticket").value = parsed ? ((parsed.invoice_number || parsed.ticket_number) || "") : "";
+    el("cif").value = cifVal; setNumberMode(!!cifVal);
     el("place").value = (parsed && parsed.business_name) ? parsed.business_name : "";
     el("date").value = (parsed && parsed.date && /^\d{4}-\d{2}-\d{2}$/.test(parsed.date)) ? parsed.date : todayStr();
-    el("companions").value = ""; el("notes").value = ""; setThumb(pendingPhoto);
+    el("compCount").value = 0; el("compList").innerHTML = ""; el("notes").value = ""; setThumb(pendingPhoto);
     el("acctRow").innerHTML = ""; setLock(false); openSheet_();
   }
   function openSheet(id) {
@@ -360,14 +469,16 @@
     el("entryForm").reset(); el("aiHint").style.display = "none"; el("sheetTitle").textContent = "Editar registre";
     el("editId").value = e.id; selectedCat = e.cat; renderCatPick(); toggleCompanions();
     el("amount").value = e.amount; el("ticket").value = e.ticket || ""; el("place").value = e.place || "";
-    el("date").value = e.date; el("companions").value = e.companions || ""; el("notes").value = e.notes || "";
+    el("cif").value = e.cif || ""; setNumberMode(!!e.cif);
+    el("date").value = e.date; setCompanionsFromString(e.companions || ""); el("notes").value = e.notes || "";
     pendingPhoto = e.photo || null; setThumb(pendingPhoto);
     el("delBtn").style.display = (admin || e.userId === me.id) ? "block" : "none";
     renderAcct(e); openSheet_();
   }
 
   function setLock(locked) {
-    ["amount", "ticket", "date", "place", "companions", "notes"].forEach(function (id) { el(id).disabled = locked; });
+    ["amount", "ticket", "date", "place", "compCount", "notes"].forEach(function (id) { el(id).disabled = locked; });
+    el("compList").querySelectorAll(".compName").forEach(function (i) { i.disabled = locked; });
     document.querySelectorAll('input[name=cat]').forEach(function (r) { r.disabled = locked; });
     el("retakeBtn").style.display = locked ? "none" : "";
     el("saveBtn").style.display = locked ? "none" : "";
@@ -398,6 +509,7 @@
   function closeSheet() { el("scrim").removeAttribute("data-open"); el("sheet").removeAttribute("data-open"); }
   el("closeSheet").onclick = closeSheet; el("scrim").onclick = closeSheet;
   el("retakeBtn").onclick = function () { retakeMode = true; el("photo").value = ""; el("photo").click(); };
+  el("compCount").addEventListener("input", function () { renderCompRows(parseInt(el("compCount").value, 10) || 0, readCompValues()); });
   el("thumbImg").onclick = function () { if (pendingPhoto) openImg(pendingPhoto); };
 
   el("entryForm").addEventListener("submit", async function (ev) {
@@ -409,13 +521,15 @@
     var payload = {
       cat: selectedCat, amount: Math.round(amount * 100) / 100,
       ticket_no: el("ticket").value.trim(), place: el("place").value.trim(),
+      cif: el("cif").value.trim(),
       date: el("date").value || todayStr(),
-      companions: selectedCat === "dietes" ? el("companions").value.trim() : "",
+      companions: selectedCat === "dietes" ? getCompanions() : "",
       notes: el("notes").value.trim()
     };
     // foto nova per pujar (només si és dataURL, no una URL existent)
     if (pendingPhoto && pendingPhoto.indexOf("data:") === 0) payload.photoBase64 = pendingPhoto.split(",")[1];
 
+    function unlockBtn() { saving = false; el("saveBtn").disabled = false; el("saveBtn").textContent = "Desa el registre"; }
     saving = true; el("saveBtn").disabled = true; el("saveBtn").textContent = "Desant…";
     try {
       var res;
@@ -428,8 +542,13 @@
       else if (res && res.emailed) okMsg = "Desat i enviat per correu";
       else okMsg = "Desat" + (res && res.emailReason ? " — correu no enviat: " + res.emailReason : "");
       toast(okMsg);
-    } catch (e) { toast(e.message); }
-    saving = false; el("saveBtn").disabled = false; el("saveBtn").textContent = "Desa el registre";
+    } catch (e) {
+      if (e && e.data && e.data.duplicate) {
+        var of = e.data.of || {};
+        toast("Tiquet duplicat: ja registrat" + (of.user ? " per " + of.user : "") + (of.date ? " el " + String(of.date).slice(0, 10) : "") + ". No es desa.");
+      } else toast(e.message);
+    }
+    unlockBtn();
   });
 
   el("delBtn").onclick = async function () {
@@ -482,13 +601,15 @@
 
   // ---------- Init ----------
   (async function () {
-    await loadRoster();
+    try { var st = await api("/api/users"); noUsers = (st && typeof st.count === "number") ? st.count === 0 : false; } catch (e) { noUsers = false; }
     var savedMe = localStorage.getItem("me");
     if (token && savedMe) {
       try { me = JSON.parse(savedMe); } catch (e) { me = null; }
       if (me) {
-        try { cfg = await api("/api/config"); applyTheme(); await loadEntries(); }
-        catch (e) { if (!token) me = null; }
+        try {
+          normalizeCfg(await api("/api/config")); applyTheme();
+          await loadRoster(); fillNamesDatalist(); await loadEntries();
+        } catch (e) { if (!token) me = null; }
       }
     }
     render();

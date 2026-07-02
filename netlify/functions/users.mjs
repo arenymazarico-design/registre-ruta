@@ -2,23 +2,66 @@ import { sql, ensure } from './_db.mjs';
 import bcrypt from 'bcryptjs';
 import { auth, json, uid } from './_auth.mjs';
 
+async function makeUser(name, role, pin) {
+  const nid = uid();
+  const hash = await bcrypt.hash(String(pin), 10);
+  await sql`insert into users (id,name,role,pin_hash,pin_plain) values (${nid},${name},${role},${hash},${String(pin)})`;
+  return nid;
+}
+
 export default async (req) => {
   try {
     await ensure();
+    const me = auth(req);
+    const count = (await sql`select count(*)::int as n from users`)[0].n;
 
-    // GET: llista pública (id, nom, rol) per a la pantalla d'inici de sessió.
+    // GET: sense sessió només retorna el nombre d'usuaris (per saber si cal crear el primer admin).
+    // Amb sessió retorna la llista (amb PIN si qui ho demana és administrador).
     if (req.method === 'GET') {
+      if (!me) return json({ count });
+      if (me.role === 'admin') {
+        const rows = await sql`select id, name, role, pin_plain from users order by name asc`;
+        return json({ users: rows.map((u) => ({ id: u.id, name: u.name, role: u.role, pin: u.pin_plain || '' })) });
+      }
       const rows = await sql`select id, name, role from users order by name asc`;
       return json({ users: rows });
     }
 
-    const count = (await sql`select count(*)::int as n from users`)[0].n;
-    const me = auth(req);
-
-    // POST: crear o actualitzar.
     if (req.method === 'POST') {
       const b = await req.json();
-      const isBootstrap = count === 0; // primer administrador, sense sessió
+
+      // Canvi de la pròpia contrasenya (qualsevol usuari amb sessió).
+      if (b.changePin) {
+        if (!me) return json({ error: 'No autenticat' }, 401);
+        if (!/^\d{4}$/.test(String(b.newPin || ''))) return json({ error: 'El PIN nou ha de tenir 4 dígits' }, 400);
+        const cur = (await sql`select * from users where id=${me.uid}`)[0];
+        if (!cur) return json({ error: 'Usuari no trobat' }, 404);
+        let ok = (cur.pin_plain != null && cur.pin_plain !== '') ? (String(b.oldPin) === String(cur.pin_plain)) : await bcrypt.compare(String(b.oldPin || ''), cur.pin_hash);
+        if (!ok) return json({ error: 'La contrasenya actual no és correcta' }, 403);
+        const hash = await bcrypt.hash(String(b.newPin), 10);
+        await sql`update users set pin_hash=${hash}, pin_plain=${String(b.newPin)} where id=${me.uid}`;
+        return json({ ok: true });
+      }
+
+      // Importació massiva des d'Excel (admin).
+      if (Array.isArray(b.bulk)) {
+        if (!me || me.role !== 'admin') return json({ error: 'Només administradors' }, 403);
+        let created = 0, skipped = 0;
+        for (const row of b.bulk) {
+          const name = (row.name || '').trim();
+          const pin = String(row.pin || '').trim();
+          const role = (row.role === 'admin') ? 'admin' : 'user';
+          if (!name || !/^\d{4}$/.test(pin)) { skipped++; continue; }
+          const exists = (await sql`select 1 from users where lower(name)=lower(${name})`)[0];
+          if (exists) { skipped++; continue; }
+          await makeUser(name, role, pin);
+          created++;
+        }
+        return json({ ok: true, created, skipped });
+      }
+
+      // Alta o edició d'un usuari.
+      const isBootstrap = count === 0;
       if (!isBootstrap && (!me || me.role !== 'admin')) return json({ error: 'Només administradors' }, 403);
       if (!b.name) return json({ error: 'Falta el nom' }, 400);
       const finalRole = isBootstrap ? 'admin' : (b.role === 'admin' ? 'admin' : 'user');
@@ -30,20 +73,22 @@ export default async (req) => {
           const admins = (await sql`select count(*)::int as n from users where role='admin'`)[0].n;
           if (admins <= 1) return json({ error: "Ha d'existir com a mínim un administrador" }, 400);
         }
-        const hash = b.pin ? await bcrypt.hash(String(b.pin), 10) : cur.pin_hash;
-        await sql`update users set name=${b.name}, role=${finalRole}, pin_hash=${hash} where id=${b.id}`;
+        if (b.pin) {
+          if (!/^\d{4}$/.test(String(b.pin))) return json({ error: 'El PIN ha de tenir 4 dígits' }, 400);
+          const hash = await bcrypt.hash(String(b.pin), 10);
+          await sql`update users set name=${b.name}, role=${finalRole}, pin_hash=${hash}, pin_plain=${String(b.pin)} where id=${b.id}`;
+        } else {
+          await sql`update users set name=${b.name}, role=${finalRole} where id=${b.id}`;
+        }
         await sql`update tickets set user_name=${b.name} where user_id=${b.id}`;
         return json({ ok: true, id: b.id });
       } else {
         if (!/^\d{4}$/.test(String(b.pin || ''))) return json({ error: 'El PIN ha de tenir 4 dígits' }, 400);
-        const nid = uid();
-        const hash = await bcrypt.hash(String(b.pin), 10);
-        await sql`insert into users (id,name,role,pin_hash) values (${nid},${b.name},${finalRole},${hash})`;
+        const nid = await makeUser(b.name, finalRole, b.pin);
         return json({ ok: true, id: nid });
       }
     }
 
-    // DELETE: eliminar (admin).
     if (req.method === 'DELETE') {
       if (!me || me.role !== 'admin') return json({ error: 'Només administradors' }, 403);
       const id = new URL(req.url).searchParams.get('id');

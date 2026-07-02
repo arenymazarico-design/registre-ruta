@@ -219,11 +219,16 @@
       <div class="catpick" id="catpick"></div>
       <div class="field amtwrap"><label for="amount">Import</label><input id="amount" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0,00" required><span class="eur">€</span></div>
       <div class="grid2">
-        <div class="field"><label for="ticket">Núm. tiquet</label><input id="ticket" type="text" autocomplete="off" placeholder="—"></div>
+        <div class="field"><label for="ticket" id="ticketLbl">Núm. tiquet</label><input id="ticket" type="text" autocomplete="off" placeholder="—"><input type="hidden" id="cif"></div>
         <div class="field"><label for="date">Data</label><input id="date" type="date" required></div>
       </div>
       <div class="field"><label for="place">Restaurant o empresa</label><input id="place" type="text" autocomplete="off" placeholder="Nom del comerç"></div>
-      <div class="field" id="compWrap" style="display:none"><label for="companions">Acompanyants</label><input id="companions" type="text" autocomplete="off" placeholder="Qui més hi era"></div>
+      <div class="field" id="compWrap" style="display:none">
+        <label for="compCount">Acompanyants (nombre de persones)</label>
+        <input id="compCount" type="number" min="0" max="30" step="1" inputmode="numeric" value="0">
+        <div id="compList" style="margin-top:10px;display:flex;flex-direction:column;gap:8px"></div>
+      </div>
+      <datalist id="namesList"></datalist>
       <div class="field"><label for="notes">Observacions</label><textarea id="notes" placeholder="Notes (opcional)"></textarea></div>
       <div id="acctRow"></div>
       <div class="actions"><button type="button" class="btn-danger" id="delBtn" style="display:none">Elimina</button><button type="submit" class="btn-primary" id="saveBtn">Desa el registre</button></div>
@@ -245,6 +250,17 @@
   <div class="pad" id="cfgBody"></div>
 </div>
 
+<div class="scrim" id="pinScrim"></div>
+<div class="sheet" id="pinSheet">
+  <div class="grab"></div>
+  <div class="sh-head"><h2>Canviar contrasenya</h2><button type="button" class="x" id="closePin">Tanca</button></div>
+  <div class="pad">
+    <div class="field"><label for="oldPin">Contrasenya actual</label><input id="oldPin" type="tel" inputmode="numeric" maxlength="4" placeholder="••••"></div>
+    <div class="field"><label for="newPin">Contrasenya nova (4 dígits)</label><input id="newPin" type="tel" inputmode="numeric" maxlength="4" placeholder="••••"></div>
+    <button type="button" class="btn-primary" id="pinSave" style="width:100%">Desa la contrasenya</button>
+  </div>
+</div>
+
 <div class="scrim" id="expScrim"></div>
 <div class="sheet" id="expSheet">
   <div class="grab"></div>
@@ -264,6 +280,7 @@
 <div class="toast" id="toast"></div>
 <div class="installbar" id="installBar"><span id="installTxt">Instal·la aquesta app a la pantalla d'inici</span><button class="ib-go" id="installBtn">Instal·lar</button><button class="ib-x" id="installClose">✕</button></div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="/app.js"></script>
 <script>
   if ('serviceWorker' in navigator) {
