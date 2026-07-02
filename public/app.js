@@ -8,6 +8,7 @@
     peatges: { label: "Peatges", color: "var(--c-peatges)" }
   };
   var CAT_KEYS = Object.keys(CATS);
+  var APP_VERSION = "2025-07-02 · consulta-multi";
   var MONTHS = ["gener", "febrer", "març", "abril", "maig", "juny", "juliol", "agost", "setembre", "octubre", "novembre", "desembre"];
   var DAYS = ["diumenge", "dilluns", "dimarts", "dimecres", "dijous", "divendres", "dissabte"];
 
@@ -205,6 +206,7 @@
     if (admin) items += '<button class="mi" id="miConfig">Configuració</button>';
     items += '<button class="mi" id="miPin">Canviar contrasenya</button>';
     items += '<button class="mi danger" id="miLogout">Tancar sessió</button>';
+    items += '<div style="padding:10px 18px;font-size:11px;color:var(--muted);text-align:center">Versió ' + APP_VERSION + '</div>';
     el("menuCard").innerHTML = '<div class="u"><b>' + esc(me.name) + '</b><span>' + (admin ? "Administrador" : "Usuari") + '</span></div>' + items;
     el("menu").setAttribute("data-open", "true");
     if (admin) el("miUsers").onclick = function () { closeMenu(); openUM(); };
