@@ -103,11 +103,19 @@ export default async (req) => {
     // PUT: actualitzar tiquet (propietari o admin), o marcar/desmarcar comptabilitzat (admin).
     if (req.method === 'PUT') {
       const b = await req.json();
+
+      // Validar en bloc (marcar com a validat) diversos tiquets (només admin).
+      if (Array.isArray(b.validateIds)) {
+        if (me.role !== 'admin') return json({ error: 'Només administradors' }, 403);
+        if (b.validateIds.length) await sql`update tickets set accounted = true where id = any(${b.validateIds})`;
+        return json({ ok: true, validated: b.validateIds.length });
+      }
+
       if (!b.id) return json({ error: 'Falta id' }, 400);
       const cur = (await sql`select * from tickets where id=${b.id}`)[0];
       if (!cur) return json({ error: 'No trobat' }, 404);
 
-      // Marcar/desmarcar com a comptabilitzat (només admin).
+      // Marcar/desmarcar com a validat (només admin).
       if (typeof b.setAccounted === 'boolean') {
         if (me.role !== 'admin') return json({ error: 'Només administradors' }, 403);
         await sql`update tickets set accounted=${b.setAccounted} where id=${b.id}`;

@@ -176,7 +176,7 @@
         var sub = []; if (e.ticket) sub.push("#" + e.ticket); if (e.companions) sub.push("👥 " + e.companions);
         var extra = sub.length ? '<div class="extra">' + esc(sub.join("  ·  ")) + '</div>' : '';
         var whoTag = admin ? '<span class="who2">' + esc(e.user) + '</span>' : '';
-        var acctTag = e.accounted ? '<span class="acctbadge">✓ comptabilitzat</span>' : '';
+        var acctTag = e.accounted ? '<span class="acctbadge">✓ validat</span>' : '';
         return '<div class="ticket' + (e.accounted ? ' acct' : '') + '" data-id="' + e.id + '"><div class="bar" style="background:' + c.color + '"></div>' +
           '<div class="body"><span class="cat" style="color:' + c.color + '">' + c.label + '</span>' + whoTag + acctTag +
           '<div class="concept">' + esc(e.place || c.label) + '</div>' + extra + '</div>' +
@@ -488,13 +488,13 @@
     var acct = el("acctRow");
     if (e && e.accounted) {
       setLock(true);
-      el("sheetTitle").textContent = "Registre comptabilitzat";
-      acct.innerHTML = '<div class="acctnote">🔒 Comptabilitzat — bloquejat: no es pot editar ni eliminar.</div>' +
-        (admin ? '<button type="button" class="btn-ghost" id="unacctBtn">Treure de comptabilitzat</button>' : '');
+      el("sheetTitle").textContent = "Registre validat";
+      acct.innerHTML = '<div class="acctnote">🔒 Validat — bloquejat: no es pot editar ni eliminar.</div>' +
+        (admin ? '<button type="button" class="btn-ghost" id="unacctBtn">Treure validació</button>' : '');
       if (admin) el("unacctBtn").onclick = function () { toggleAccounted(e.id, false); };
     } else {
       setLock(false);
-      acct.innerHTML = (admin && e) ? '<button type="button" class="btn-ghost" id="acctBtn" style="border-color:#bcd9c4;color:#2f7a4a;margin-bottom:10px">✓ Marcar com a comptabilitzat</button>' : "";
+      acct.innerHTML = (admin && e) ? '<button type="button" class="btn-ghost" id="acctBtn" style="border-color:#bcd9c4;color:#2f7a4a;margin-bottom:10px">✓ Marcar com a validat</button>' : "";
       if (admin && e) el("acctBtn").onclick = function () { toggleAccounted(e.id, true); };
     }
   }
@@ -502,7 +502,7 @@
     try {
       await api("/api/tickets", "PUT", { id: id, setAccounted: val });
       await loadEntries(); closeSheet(); render();
-      toast(val ? "Marcat com a comptabilitzat" : "Desbloquejat");
+      toast(val ? "Marcat com a validat" : "Validació treta");
     } catch (e) { toast(e.message); }
   }
   function openSheet_() { el("scrim").setAttribute("data-open", "true"); el("sheet").setAttribute("data-open", "true"); }
@@ -545,8 +545,8 @@
     } catch (e) {
       if (e && e.data && e.data.duplicate) {
         var of = e.data.of || {};
-        toast("Tiquet duplicat: ja registrat" + (of.user ? " per " + of.user : "") + (of.date ? " el " + String(of.date).slice(0, 10) : "") + ". No es desa.");
-      } else toast(e.message);
+        toast("Tiquet duplicat: ja registrat" + (of.user ? " per " + of.user : "") + (of.date ? " el " + String(of.date).slice(0, 10) : "") + ". No es desa.", { error: true, cross: true, ms: 5500 });
+      } else toast(e.message, { error: true });
     }
     unlockBtn();
   });
@@ -592,7 +592,7 @@
       '<div class="field"><label for="qAcct">Estat</label><select id="qAcct">' +
       '<option value="tots"' + (q.acct === "tots" ? " selected" : "") + '>Tots</option>' +
       '<option value="no"' + (q.acct === "no" ? " selected" : "") + '>Pendents</option>' +
-      '<option value="si"' + (q.acct === "si" ? " selected" : "") + '>Comptabilitzats</option></select></div>' +
+      '<option value="si"' + (q.acct === "si" ? " selected" : "") + '>Validats</option></select></div>' +
       '<div style="text-align:center;font-weight:700;font-size:15px;margin:6px 0 14px" id="qCount">—</div>' +
       '<div class="actions"><button type="button" class="btn-primary" id="qXls">Exportar a Excel</button>' +
       '<button type="button" class="btn-danger" id="qCsv" style="border-color:var(--line);color:var(--ink-soft)">CSV</button></div>';
@@ -613,8 +613,10 @@
     });
     return { header: header, rows: rows };
   }
-  function exportXlsx() {
+  async function exportXlsx() {
     if (typeof XLSX === "undefined") { toast("No s'ha pogut carregar l'exportador"); return; }
+    var list = computeConsulta();
+    if (!list.length) { toast("No hi ha registres per exportar"); return; }
     var d = consultaRows();
     var ws = XLSX.utils.aoa_to_sheet([d.header].concat(d.rows));
     ws["!cols"] = [{ wch: 11 }, { wch: 18 }, { wch: 16 }, { wch: 14 }, { wch: 12 }, { wch: 24 }, { wch: 10 }, { wch: 22 }, { wch: 26 }];
@@ -622,6 +624,17 @@
     XLSX.utils.book_append_sheet(wb, ws, "Consulta");
     XLSX.writeFile(wb, "consulta.xlsx");
     toast("Excel generat");
+    // Marcar com a validats (bloquejats) els registres exportats — només admin.
+    if (admin) {
+      var pend = list.filter(function (e) { return !e.accounted; }).map(function (e) { return e.id; });
+      if (pend.length && confirm("S'han exportat " + list.length + " registres.\n\nVols marcar-los com a VALIDATS? Quedaran bloquejats i els usuaris ja no els podran modificar. (" + pend.length + " pendents)")) {
+        try {
+          await api("/api/tickets", "PUT", { validateIds: pend });
+          await loadEntries(); updateConsultaSummary(); render();
+          toast(pend.length + " registres validats");
+        } catch (e) { toast(e.message); }
+      }
+    }
   }
   function exportCsv() {
     var d = consultaRows();
@@ -640,7 +653,15 @@
 
   function openImg(src) { el("imgviewImg").src = src; el("imgview").setAttribute("data-open", "true"); }
   el("imgview").onclick = function () { this.removeAttribute("data-open"); };
-  var toastT; function toast(msg) { var t = el("toast"); t.textContent = msg; t.setAttribute("data-show", "true"); clearTimeout(toastT); toastT = setTimeout(function () { t.removeAttribute("data-show"); }, 2200); }
+  var toastT; function toast(msg, opts) {
+    opts = opts || {};
+    var t = el("toast");
+    t.className = "toast" + (opts.error ? " err" : "");
+    t.innerHTML = (opts.cross ? '<span class="xmark">✕</span>' : '') + esc(msg);
+    t.setAttribute("data-show", "true");
+    clearTimeout(toastT);
+    toastT = setTimeout(function () { t.removeAttribute("data-show"); }, opts.ms || 3500);
+  }
 
   // ---------- Instal·lar com a app ----------
   var deferredPrompt = null;
