@@ -5,10 +5,11 @@
     dietes: { label: "Dietes", color: "var(--c-dietes)" },
     gastos: { label: "Gastos", color: "var(--c-gastos)" },
     bascules: { label: "Bàscules", color: "var(--c-bascules)" },
-    peatges: { label: "Peatges", color: "var(--c-peatges)" }
+    peatges: { label: "Peatges", color: "var(--c-peatges)" },
+    combustible: { label: "Combustible", color: "var(--c-combustible)" }
   };
   var CAT_KEYS = Object.keys(CATS);
-  var APP_VERSION = "2025-07-02 · idiomes";
+  var APP_VERSION = "2025-07-03 · vehicles";
 
   // ---------- Idioma (català per defecte / castellà) ----------
   var lang = localStorage.getItem("lang") || "ca";
@@ -70,7 +71,20 @@
     "No hi ha registres per exportar": "No hay registros para exportar",
     "Escriu el teu nom": "Escribe tu nombre", "El PIN nou ha de tenir 4 dígits": "El PIN nuevo debe tener 4 dígitos",
     "El PIN ha de tenir 4 dígits": "El PIN debe tener 4 dígitos", "Escriu el nom": "Escribe el nombre",
-    "Posa un import vàlid": "Pon un importe válido"
+    "Posa un import vàlid": "Pon un importe válido",
+    "Litres": "Litros", "Km del comptador": "Km del cuentakilómetros", "Nom de la gasolinera": "Nombre de la gasolinera",
+    "Consulta de km": "Consulta de km", "Informe de km i combustible": "Informe de km y combustible",
+    "Agrupar i sumar per usuari": "Agrupar y sumar por usuario", "Imprimir": "Imprimir",
+    "Total general": "Total general", "Distància (km)": "Distancia (km)", "Consum (L/100km)": "Consumo (L/100km)",
+    "Cost (€)": "Coste (€)", "No hi ha registres per exportar": "No hay registros para exportar",
+    "Apuntar km del cotxe": "Apuntar km del coche", "Desa la lectura": "Guardar la lectura", "Km desats": "Km guardados",
+    "Posa els km": "Pon los km", "Cost": "Coste",
+    "📋 Apunta els km del cotxe d'aquest mes": "📋 Apunta los km del coche de este mes",
+    "Apunta la lectura del comptador de km del cotxe. Es demana un cop al mes.": "Apunta la lectura del cuentakilómetros del coche. Se pide una vez al mes.",
+    "El símbol ~ indica un mes amb km estimats (filtre no complet o falten lectures). Els km surten de les lectures mensuals del comptador.": "El símbolo ~ indica un mes con km estimados (filtro incompleto o faltan lecturas). Los km salen de las lecturas mensuales del cuentakilómetros.",
+    "Els meus vehicles": "Mis vehículos", "Cap vehicle": "Sin vehículo", "Afegir": "Añadir",
+    "Desa els vehicles": "Guardar los vehículos", "Vehicles desats": "Vehículos guardados",
+    "Vehicles de l'usuari": "Vehículos del usuario"
   };
   var translating = false;
   function translateNode(node) {
@@ -120,6 +134,7 @@
   var me = null, admin = false;
   var roster = [];            // {id,name,role} per a login
   var entries = [];
+  var readings = [];
   var cfg = { email: "", color: "", logo: "", cif: "", names: [] };
   var view = new Date(); view.setDate(1);
   var filter = "tots", userFilter = "tots";
@@ -156,6 +171,7 @@
   function applyTheme() { if (cfg.color) document.documentElement.style.setProperty("--amber", cfg.color); else document.documentElement.style.removeProperty("--amber"); }
 
   async function loadEntries() { var r = await api("/api/tickets"); entries = r.tickets || []; }
+  async function loadReadings() { try { var r = await api("/api/readings"); readings = r.readings || []; } catch (e) { readings = []; } }
   async function loadRoster() { try { var r = await api("/api/users"); roster = r.users || []; } catch (e) { roster = []; } }
   function normalizeCfg(c) {
     cfg.email = c.email || ""; cfg.color = c.color || ""; cfg.logo = c.logo || ""; cfg.cif = c.cif || "";
@@ -204,7 +220,7 @@
         var r = await api("/api/users", "POST", { name: n, pin: p });
         var lg = await api("/api/login", "POST", { userId: r.id, pin: p });
         me = lg.user; setSession(lg.token, me);
-        normalizeCfg(await api("/api/config")); applyTheme(); await loadRoster(); fillNamesDatalist(); await loadEntries();
+        normalizeCfg(await api("/api/config")); applyTheme(); await loadRoster(); fillNamesDatalist(); await loadEntries(); await loadReadings();
         render(); toast("Administrador creat");
       } catch (e) { toast(e.message); }
     };
@@ -231,8 +247,8 @@
     try {
       var lg = await api("/api/login", "POST", { name: name, pin: pin });
       me = lg.user; setSession(lg.token, me); filter = "tots"; userFilter = "tots";
-      normalizeCfg(await api("/api/config")); applyTheme(); await loadRoster(); fillNamesDatalist(); await loadEntries();
-      render(); toast("Hola, " + me.name.split(" ")[0]);
+      normalizeCfg(await api("/api/config")); applyTheme(); await loadRoster(); fillNamesDatalist(); await loadEntries(); await loadReadings();
+      render(); toast("Hola, " + me.name.split(" ")[0]); showKmReminder();
     } catch (e) { toast(e.message); }
   }
 
@@ -312,6 +328,8 @@
     if (admin) items += '<button class="mi" id="miUsers">Gestionar usuaris</button>';
     if (admin) items += '<button class="mi" id="miConfig">Configuració</button>';
     items += '<button class="mi" id="miPin">Canviar contrasenya</button>';
+    items += '<button class="mi" id="miKm">Consulta de km</button>';
+    items += '<button class="mi" id="miVeh">Els meus vehicles</button>';
     items += '<button class="mi danger" id="miLogout">Tancar sessió</button>';
     items += '<div style="display:flex;gap:8px;justify-content:center;padding:12px">' +
       '<button type="button" class="langbtn" data-l="ca"' + (lang === "ca" ? ' data-active="true"' : '') + '>Català</button>' +
@@ -322,6 +340,8 @@
     if (admin) el("miUsers").onclick = function () { closeMenu(); openUM(); };
     if (admin) el("miConfig").onclick = function () { closeMenu(); openCfg(); };
     el("miPin").onclick = function () { closeMenu(); openPin(); };
+    el("miKm").onclick = function () { closeMenu(); openKm(); };
+    el("miVeh").onclick = function () { closeMenu(); openVehicles(null); };
     el("miLogout").onclick = function () { closeMenu(); clearSession(); me = null; render(); };
     el("menuCard").querySelectorAll(".langbtn").forEach(function (b) { b.onclick = function () { setLang(b.getAttribute("data-l")); }; });
   }
@@ -395,8 +415,10 @@
       '<label><input type="radio" name="urole" value="admin"' + (role === "admin" ? " checked" : "") + '><div class="opt">Administrador</div></label></div>' +
       '<div class="field"><label for="uPin">PIN (4 dígits)</label><input id="uPin" type="tel" inputmode="numeric" maxlength="4" value="' + (u && u.pin ? esc(u.pin) : "") + '" placeholder="' + (u ? "Deixa-ho buit per no canviar-lo" : "••••") + '"></div>' +
       '<div class="actions"><button type="button" class="btn-ghost" id="uBack" style="flex:0 0 auto;width:auto;padding:14px 18px">‹ Enrere</button><button type="button" class="btn-primary" id="uSave">Desa</button></div>' +
+      (u ? '<button type="button" class="btn-ghost" id="uVeh" style="width:100%;margin-top:10px">Vehicles de l\'usuari</button>' : '') +
       (u ? '<button type="button" class="btn-danger" id="uDel" style="width:100%;margin-top:10px">Eliminar usuari</button>' : '');
     el("uBack").onclick = renderUMList;
+    var uv = el("uVeh"); if (uv) uv.onclick = function () { openVehicles(u.id); };
     el("uSave").onclick = async function () {
       var nm = el("uName").value.trim();
       var rl = (document.querySelector('input[name=urole]:checked') || {}).value || "user";
@@ -545,7 +567,13 @@
     el("catpick").innerHTML = CAT_KEYS.map(function (k) { return '<label style="color:' + CATS[k].color + '"><input type="radio" name="cat" value="' + k + '"' + (selectedCat === k ? " checked" : "") + '><div class="opt"><span class="sq" style="background:' + CATS[k].color + '"></span>' + CATS[k].label + '</div></label>'; }).join("");
     document.querySelectorAll('input[name=cat]').forEach(function (r) { r.onchange = function () { selectedCat = r.value; toggleCompanions(); }; });
   }
-  function toggleCompanions() { el("compWrap").style.display = (selectedCat === "dietes") ? "block" : "none"; }
+  function toggleCompanions() {
+    el("compWrap").style.display = (selectedCat === "dietes") ? "block" : "none";
+    var fuel = (selectedCat === "combustible");
+    el("fuelWrap").style.display = fuel ? "grid" : "none";
+    el("placeLbl").textContent = fuel ? "Gasolinera" : "Restaurant o empresa";
+    el("place").placeholder = fuel ? "Nom de la gasolinera" : "Nom del comerç";
+  }
   function setThumb(src) { if (src) { el("thumbImg").src = src; el("thumbrow").style.display = "flex"; } else el("thumbrow").style.display = "none"; }
   function setNumberMode(isFactura) { el("ticketLbl").textContent = isFactura ? "Núm. factura" : "Núm. tiquet"; }
   function renderCompRows(n, values) {
@@ -573,6 +601,7 @@
     el("ticket").value = parsed ? ((parsed.invoice_number || parsed.ticket_number) || "") : "";
     el("cif").value = cifVal; setNumberMode(!!cifVal);
     el("place").value = (parsed && parsed.business_name) ? parsed.business_name : "";
+    el("litres").value = (parsed && parsed.litres != null) ? parsed.litres : "";
     el("date").value = (parsed && parsed.date && /^\d{4}-\d{2}-\d{2}$/.test(parsed.date)) ? parsed.date : todayStr();
     el("compCount").value = 0; el("compList").innerHTML = ""; el("notes").value = ""; setThumb(pendingPhoto);
     el("acctRow").innerHTML = ""; setLock(false); openSheet_();
@@ -583,6 +612,7 @@
     el("editId").value = e.id; selectedCat = e.cat; renderCatPick(); toggleCompanions();
     el("amount").value = e.amount; el("ticket").value = e.ticket || ""; el("place").value = e.place || "";
     el("cif").value = e.cif || ""; setNumberMode(!!e.cif);
+    el("litres").value = (e.litres != null) ? e.litres : "";
     el("date").value = e.date; setCompanionsFromString(e.companions || ""); el("notes").value = e.notes || "";
     pendingPhoto = e.photo || null; setThumb(pendingPhoto);
     el("delBtn").style.display = (admin || e.userId === me.id) ? "block" : "none";
@@ -590,7 +620,7 @@
   }
 
   function setLock(locked) {
-    ["amount", "ticket", "date", "place", "compCount", "notes"].forEach(function (id) { el(id).disabled = locked; });
+    ["amount", "ticket", "date", "place", "compCount", "notes", "litres"].forEach(function (id) { el(id).disabled = locked; });
     el("compList").querySelectorAll(".compName").forEach(function (i) { i.disabled = locked; });
     document.querySelectorAll('input[name=cat]').forEach(function (r) { r.disabled = locked; });
     el("retakeBtn").style.display = locked ? "none" : "";
@@ -637,7 +667,8 @@
       cif: el("cif").value.trim(),
       date: el("date").value || todayStr(),
       companions: selectedCat === "dietes" ? getCompanions() : "",
-      notes: el("notes").value.trim()
+      notes: el("notes").value.trim(),
+      litres: el("litres").value
     };
     // foto nova per pujar (només si és dataURL, no una URL existent)
     if (pendingPhoto && pendingPhoto.indexOf("data:") === 0) payload.photoBase64 = pendingPhoto.split(",")[1];
@@ -809,6 +840,210 @@
   function closeExport() { el("expScrim").removeAttribute("data-open"); el("expSheet").removeAttribute("data-open"); }
   el("closeExp").onclick = closeExport; el("expScrim").onclick = closeExport;
 
+  // ---------- Informe de km i combustible (km per lectures mensuals) ----------
+  var km = { users: [], from: "", to: "", group: false };
+  var kmUserQuery = "";
+  function openKm() { kmUserQuery = ""; renderKm(); el("kmScrim").setAttribute("data-open", "true"); el("kmSheet").setAttribute("data-open", "true"); }
+  function closeKm() { el("kmScrim").removeAttribute("data-open"); el("kmSheet").removeAttribute("data-open"); }
+  el("closeKm").onclick = closeKm; el("kmScrim").onclick = closeKm;
+  function fmt(n, d) { return (n || 0).toLocaleString("ca-ES", { minimumFractionDigits: d, maximumFractionDigits: d }); }
+  function dayNum(s) { var p = String(s).split("-"); return Date.UTC(+p[0], +p[1] - 1, +p[2]) / 86400000; }
+  function addDay(s, n) { var d = new Date((dayNum(s) + n) * 86400000); return d.toISOString().slice(0, 10); }
+  function maxD(a, b) { return a > b ? a : b; }
+  function minD(a, b) { return a < b ? a : b; }
+  function monthLabel(ym) { var y = ym.slice(0, 4), m = +ym.slice(5, 7); var s = MONTHS[m - 1] + " " + y; return s.charAt(0).toUpperCase() + s.slice(1); }
+  function firstDay(ym) { return ym + "-01"; }
+  function nextMonthFirst(ym) { var y = +ym.slice(0, 4), m = +ym.slice(5, 7) + 1; if (m > 12) { m = 1; y++; } return y + "-" + String(m).padStart(2, "0") + "-01"; }
+  function monthsBetween(fy, ty) { var out = [], y = +fy.slice(0, 4), m = +fy.slice(5, 7), ey = +ty.slice(0, 4), em = +ty.slice(5, 7), g = 0; while ((y < ey || (y === ey && m <= em)) && g < 600) { out.push(y + "-" + String(m).padStart(2, "0")); m++; if (m > 12) { m = 1; y++; } g++; } return out; }
+
+  function readingsOf(userId) { return readings.filter(function (r) { return r.userId === userId && r.km != null; }).slice().sort(function (a, b) { return dayNum(a.date) - dayNum(b.date); }); }
+  function kmAt(userId, dateStr) {
+    var r = readingsOf(userId);
+    if (!r.length) return null;
+    if (r.length === 1) return r[0].km;
+    var t = dayNum(dateStr);
+    if (t <= dayNum(r[0].date)) { var s0 = (r[1].km - r[0].km) / ((dayNum(r[1].date) - dayNum(r[0].date)) || 1); return r[0].km + s0 * (t - dayNum(r[0].date)); }
+    if (t >= dayNum(r[r.length - 1].date)) { var a = r[r.length - 2], b = r[r.length - 1]; var s1 = (b.km - a.km) / ((dayNum(b.date) - dayNum(a.date)) || 1); return b.km + s1 * (t - dayNum(b.date)); }
+    for (var i = 0; i < r.length - 1; i++) { var d0 = dayNum(r[i].date), d1 = dayNum(r[i + 1].date); if (t >= d0 && t <= d1) { var f = (t - d0) / ((d1 - d0) || 1); return r[i].km + (r[i + 1].km - r[i].km) * f; } }
+    return r[r.length - 1].km;
+  }
+  function distanceFor(scope, from, toExcl) {
+    var total = 0;
+    scope.forEach(function (uid) { var kf = kmAt(uid, from), kt = kmAt(uid, toExcl); if (kf != null && kt != null) total += Math.max(0, kt - kf); });
+    return total;
+  }
+  function scopeUsers() { if (!admin) return [me.id]; if (km.users.length) return km.users.slice(); return roster.map(function (u) { return u.id; }); }
+  function fuelInRange(scope, a, b) { return entries.filter(function (e) { return e.cat === "combustible" && scope.indexOf(e.userId) >= 0 && e.date >= a && e.date <= b; }); }
+  function litresSum(l) { return l.reduce(function (s, e) { return s + (e.litres || 0); }, 0); }
+  function costSum(l) { return l.reduce(function (s, e) { return s + (e.amount || 0); }, 0); }
+  function rangeBounds() {
+    var scope = scopeUsers(), dates = [], today = todayStr();
+    entries.forEach(function (e) { if (e.cat === "combustible" && scope.indexOf(e.userId) >= 0) dates.push(e.date); });
+    readings.forEach(function (r) { if (scope.indexOf(r.userId) >= 0) dates.push(r.date); });
+    var minD0 = dates.length ? dates.reduce(function (a, b) { return a < b ? a : b; }) : today;
+    return { from: km.from || minD0, to: km.to || today };
+  }
+  function monthlyRows() {
+    var b = rangeBounds(), scope = scopeUsers();
+    return monthsBetween(b.from.slice(0, 7), b.to.slice(0, 7)).map(function (ym) {
+      var mStart = firstDay(ym), mNext = nextMonthFirst(ym);
+      var a = maxD(mStart, b.from), bexcl = minD(mNext, addDay(b.to, 1));
+      var dist = distanceFor(scope, a, bexcl);
+      var fuel = fuelInRange(scope, a, addDay(bexcl, -1));
+      var lit = litresSum(fuel), cost = costSum(fuel);
+      return { ym: ym, dist: dist, litres: lit, cost: cost, avg: dist > 0 ? lit / dist * 100 : 0, estimated: (a !== mStart) || (bexcl !== mNext) };
+    });
+  }
+  function totalsFor(scope) {
+    var b = rangeBounds();
+    var dist = distanceFor(scope, b.from, addDay(b.to, 1));
+    var fuel = fuelInRange(scope, b.from, b.to);
+    var lit = litresSum(fuel), cost = costSum(fuel);
+    return { dist: dist, litres: lit, cost: cost, avg: dist > 0 ? lit / dist * 100 : 0, count: fuel.length };
+  }
+  function reportMonthly() {
+    var rows = monthlyRows(), t = totalsFor(scopeUsers());
+    var head = '<tr><th>Mes</th><th class="num">Km</th><th class="num">Litres</th><th class="num">L/100km</th><th class="num">Cost</th></tr>';
+    var body = rows.map(function (r) {
+      return '<tr><td>' + monthLabel(r.ym) + '</td><td class="num">' + fmt(r.dist, 0) + (r.estimated ? ' ~' : '') + '</td><td class="num">' + fmt(r.litres, 2) + '</td><td class="num">' + fmt(r.avg, 2) + '</td><td class="num">' + eur(r.cost) + '</td></tr>';
+    }).join("");
+    var total = '<tr class="grand"><td>TOTAL</td><td class="num">' + fmt(t.dist, 0) + '</td><td class="num">' + fmt(t.litres, 2) + '</td><td class="num">' + fmt(t.avg, 2) + '</td><td class="num">' + eur(t.cost) + '</td></tr>';
+    return '<table class="rep">' + head + body + total + '</table>';
+  }
+  function reportByUser() {
+    var scope = scopeUsers(), b = rangeBounds();
+    var head = '<tr><th>Usuari</th><th class="num">Km</th><th class="num">Litres</th><th class="num">L/100km</th><th class="num">Cost</th></tr>';
+    var tD = 0, tL = 0, tC = 0;
+    var body = scope.map(function (uid) {
+      var d = distanceFor([uid], b.from, addDay(b.to, 1));
+      var fuel = fuelInRange([uid], b.from, b.to);
+      var lit = litresSum(fuel), cost = costSum(fuel);
+      tD += d; tL += lit; tC += cost;
+      return { uid: uid, d: d, lit: lit, cost: cost, avg: d > 0 ? lit / d * 100 : 0 };
+    }).filter(function (x) { return x.d > 0 || x.lit > 0; }).map(function (x) {
+      return '<tr><td>' + esc(userName(x.uid)) + '</td><td class="num">' + fmt(x.d, 0) + '</td><td class="num">' + fmt(x.lit, 2) + '</td><td class="num">' + fmt(x.avg, 2) + '</td><td class="num">' + eur(x.cost) + '</td></tr>';
+    }).join("");
+    var avg = tD > 0 ? tL / tD * 100 : 0;
+    var total = '<tr class="grand"><td>TOTAL</td><td class="num">' + fmt(tD, 0) + '</td><td class="num">' + fmt(tL, 2) + '</td><td class="num">' + fmt(avg, 2) + '</td><td class="num">' + eur(tC) + '</td></tr>';
+    return '<table class="rep">' + head + body + total + '</table>';
+  }
+  function refreshKmMsel() {
+    var tags = el("kmUserTags"), list = el("kmUserList");
+    if (!tags || !list) return;
+    tags.innerHTML = km.users.map(function (id) { return '<span class="mtag">' + esc(userName(id)) + '<b data-rem="' + id + '">✕</b></span>'; }).join("");
+    var term = (kmUserQuery || "").toLowerCase();
+    var opts = roster.filter(function (u) { return u.name.toLowerCase().indexOf(term) >= 0; });
+    list.innerHTML = opts.length ? opts.map(function (u) {
+      var sel = km.users.indexOf(u.id) >= 0;
+      return '<div class="msel-opt" data-id="' + u.id + '" data-sel="' + sel + '"><span class="ck">' + (sel ? "✓" : "") + '</span>' + esc(u.name) + '</div>';
+    }).join("") : '<div class="msel-empty">Cap usuari</div>';
+    tags.querySelectorAll("[data-rem]").forEach(function (b) { b.onclick = function () { var id = b.getAttribute("data-rem"); var i = km.users.indexOf(id); if (i >= 0) km.users.splice(i, 1); refreshKmMsel(); renderKmReport(); }; });
+    list.querySelectorAll(".msel-opt").forEach(function (o) { o.onclick = function () { var id = o.getAttribute("data-id"); var i = km.users.indexOf(id); if (i >= 0) km.users.splice(i, 1); else km.users.push(id); refreshKmMsel(); renderKmReport(); }; });
+  }
+  function renderKmReport() { el("kmReport").innerHTML = (admin && km.group) ? reportByUser() : reportMonthly(); }
+  function renderKm() {
+    var filters = "";
+    if (admin) {
+      filters =
+        '<label style="display:block;font-size:12px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--muted);margin-bottom:6px">Usuaris</label>' +
+        '<div class="msel"><div class="msel-tags" id="kmUserTags"></div><input id="kmUserSearch" type="text" placeholder="Cerca usuari…" autocomplete="off"><div class="msel-list" id="kmUserList"></div></div>' +
+        '<div class="grid2" style="margin-top:10px"><div class="field"><label for="kmFrom">Des de</label><input id="kmFrom" type="date" value="' + esc(km.from) + '"></div>' +
+        '<div class="field"><label for="kmTo">Fins a</label><input id="kmTo" type="date" value="' + esc(km.to) + '"></div></div>' +
+        '<label style="display:flex;align-items:center;gap:9px;font-size:15px;font-weight:600;margin:2px 0 12px;cursor:pointer"><input type="checkbox" id="kmGroup"' + (km.group ? " checked" : "") + ' style="width:20px;height:20px"> Agrupar i sumar per usuari</label>';
+    }
+    var actions = '<div class="actions" style="margin-top:14px"><button type="button" class="btn-primary" id="kmXls">Exportar a Excel</button><button type="button" class="btn-danger" id="kmPrint" style="border-color:var(--line);color:var(--ink-soft)">Imprimir</button></div>';
+    var note = '<p style="font-size:12px;color:var(--muted);margin:10px 0 0">El símbol ~ indica un mes amb km estimats (filtre no complet o falten lectures). Els km surten de les lectures mensuals del comptador.</p>';
+    el("kmBody").innerHTML = filters + '<div class="repwrap" id="kmReport"></div>' + note + actions;
+    renderKmReport();
+    if (admin) {
+      var us = el("kmUserSearch"); if (us) us.oninput = function () { kmUserQuery = us.value; refreshKmMsel(); };
+      el("kmFrom").onchange = function () { km.from = el("kmFrom").value; renderKmReport(); };
+      el("kmTo").onchange = function () { km.to = el("kmTo").value; renderKmReport(); };
+      el("kmGroup").onchange = function () { km.group = el("kmGroup").checked; renderKmReport(); };
+      refreshKmMsel();
+    }
+    el("kmXls").onclick = exportKm;
+    el("kmPrint").onclick = printKm;
+  }
+  function printKm() {
+    el("printArea").innerHTML = '<h2>Informe de km i combustible</h2>' + ((admin && km.group) ? reportByUser() : reportMonthly());
+    window.print();
+  }
+  function exportKm() {
+    if (typeof XLSX === "undefined") { toast("No s'ha pogut carregar l'exportador"); return; }
+    var scope = scopeUsers(), b = rangeBounds();
+    var fuel = fuelInRange(scope, b.from, b.to);
+    if (!fuel.length && !readings.length) { toast("No hi ha registres per exportar"); return; }
+    var det = [["Data", "Usuari", "Gasolinera", "Litres", "Import"]].concat(
+      fuel.slice().sort(function (a, c) { return a.date < c.date ? -1 : 1; }).map(function (e) { return [e.date, e.user, e.place || "", e.litres != null ? Number(e.litres) : "", Number(e.amount)]; }));
+    var mens = [["Mes", "Km", "Litres", "Consum (L/100km)", "Cost (€)"]];
+    monthlyRows().forEach(function (r) { mens.push([monthLabel(r.ym) + (r.estimated ? " (~)" : ""), Number(r.dist.toFixed(0)), Number(r.litres.toFixed(2)), Number(r.avg.toFixed(2)), Number(r.cost.toFixed(2))]); });
+    var t = totalsFor(scope); mens.push(["TOTAL", Number(t.dist.toFixed(0)), Number(t.litres.toFixed(2)), Number(t.avg.toFixed(2)), Number(t.cost.toFixed(2))]);
+    var usr = [["Usuari", "Km", "Litres", "Consum (L/100km)", "Cost (€)"]];
+    scope.forEach(function (uid) { var d = distanceFor([uid], b.from, addDay(b.to, 1)); var f = fuelInRange([uid], b.from, b.to); var lit = litresSum(f), cost = costSum(f); if (d > 0 || lit > 0) usr.push([userName(uid), Number(d.toFixed(0)), Number(lit.toFixed(2)), Number((d > 0 ? lit / d * 100 : 0).toFixed(2)), Number(cost.toFixed(2))]); });
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(mens), "Resum mensual");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(usr), "Per usuari");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(det), "Repostatges");
+    XLSX.writeFile(wb, "km-combustible.xlsx");
+    toast("Excel generat");
+  }
+
+  // ---------- Lectura mensual de km + recordatori ----------
+  function openRead() {
+    var today = todayStr(); el("readDate").value = today;
+    var ym = today.slice(0, 7); var ex = readings.filter(function (r) { return r.userId === me.id && r.ym === ym; })[0];
+    el("readKm").value = ex ? ex.km : "";
+    el("readScrim").setAttribute("data-open", "true"); el("readSheet").setAttribute("data-open", "true");
+  }
+  function closeRead() { el("readScrim").removeAttribute("data-open"); el("readSheet").removeAttribute("data-open"); }
+  el("closeRead").onclick = closeRead; el("readScrim").onclick = closeRead;
+  el("readSave").onclick = async function () {
+    var v = el("readKm").value;
+    if (v === "" || isNaN(Number(v))) { toast("Posa els km", { error: true }); return; }
+    try { await api("/api/readings", "POST", { km: Number(v), date: el("readDate").value || todayStr() }); await loadReadings(); closeRead(); hideKmReminder(); toast("Km desats"); }
+    catch (e) { toast(e.message, { error: true }); }
+  };
+  function hasReadingThisMonth() { var ym = todayStr().slice(0, 7); return readings.some(function (r) { return r.userId === me.id && r.ym === ym; }); }
+  function showKmReminder() { if (me && !hasReadingThisMonth()) el("kmReminder").setAttribute("data-show", "true"); }
+  function hideKmReminder() { el("kmReminder").removeAttribute("data-show"); }
+  el("kmReminderGo").onclick = function () { hideKmReminder(); openRead(); };
+  el("kmReminderX").onclick = function () { hideKmReminder(); };
+
+  // ---------- Vehicles (matrícules) ----------
+  var vehTarget = null, vehTmp = [];
+  function openVehicles(userId) {
+    vehTarget = userId || null;
+    var uid = userId || me.id;
+    var u = roster.filter(function (x) { return x.id === uid; })[0];
+    vehTmp = (u && u.vehicles) ? u.vehicles.slice() : [];
+    el("vehTitle").textContent = userId ? ("Vehicles de " + (u ? u.name : "")) : "Els meus vehicles";
+    renderVeh();
+    el("vehScrim").setAttribute("data-open", "true"); el("vehSheet").setAttribute("data-open", "true");
+  }
+  function closeVeh() { el("vehScrim").removeAttribute("data-open"); el("vehSheet").removeAttribute("data-open"); }
+  el("closeVeh").onclick = closeVeh; el("vehScrim").onclick = closeVeh;
+  function renderVeh() {
+    var chips = vehTmp.length ? vehTmp.map(function (p, i) { return '<span class="mtag">' + esc(p) + '<b data-i="' + i + '">✕</b></span>'; }).join("") : '<span style="font-size:13px;color:var(--muted)">Cap vehicle</span>';
+    el("vehBody").innerHTML =
+      '<div class="msel-tags" style="margin-bottom:12px">' + chips + '</div>' +
+      '<div style="display:flex;gap:8px;margin-bottom:14px"><input id="vehInput" type="text" placeholder="Matrícula (ex. 1234ABC)" autocomplete="off" style="flex:1;border:1.5px solid var(--line);border-radius:11px;padding:12px 14px;font-size:16px;text-transform:uppercase"><button type="button" class="btn-ghost" id="vehAdd" style="width:auto;padding:12px 18px">Afegir</button></div>' +
+      '<button type="button" class="btn-primary" id="vehSave" style="width:100%">Desa els vehicles</button>';
+    el("vehBody").querySelectorAll("[data-i]").forEach(function (b) { b.onclick = function () { vehTmp.splice(+b.getAttribute("data-i"), 1); renderVeh(); }; });
+    var add = function () { var v = (el("vehInput").value || "").trim().toUpperCase(); if (!v) return; if (vehTmp.indexOf(v) < 0) vehTmp.push(v); el("vehInput").value = ""; renderVeh(); var i = el("vehInput"); if (i) i.focus(); };
+    el("vehAdd").onclick = add;
+    el("vehInput").addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); add(); } });
+    el("vehSave").onclick = async function () {
+      try {
+        var payload = { setVehicles: vehTmp };
+        if (vehTarget) payload.id = vehTarget;
+        await api("/api/users", "POST", payload);
+        await loadRoster();
+        closeVeh(); toast("Vehicles desats");
+      } catch (e) { toast(e.message, { error: true }); }
+    };
+  }
+
   function openImg(src) { el("imgviewImg").src = src; el("imgview").setAttribute("data-open", "true"); }
   el("imgview").onclick = function () { this.removeAttribute("data-open"); };
   var toastT; function toast(msg, opts) {
@@ -851,11 +1086,12 @@
       if (me) {
         try {
           normalizeCfg(await api("/api/config")); applyTheme();
-          await loadRoster(); fillNamesDatalist(); await loadEntries();
+          await loadRoster(); fillNamesDatalist(); await loadEntries(); await loadReadings();
         } catch (e) { if (!token) me = null; }
       }
     }
     render();
     if (lang === "es") applyLang();
+    if (me) showKmReminder();
   })();
 })();
