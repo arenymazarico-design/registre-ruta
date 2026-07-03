@@ -4,9 +4,10 @@ const PROMPT =
   "Estàs llegint la foto d'un tiquet, rebut o factura (probablement en català o castellà). " +
   "Respon NOMÉS amb un objecte JSON, sense text ni marques de codi, amb aquestes claus: " +
   '{"date":"YYYY-MM-DD" o null,"ticket_number":string o null,"invoice_number":string o null,' +
-  '"cif":string o null,"amount":number (total a pagar, decimal amb punt) o null,' +
-  '"business_name":string o null,"category":un de "dietes","gastos","bascules","peatges" o null}. ' +
+  '"cif":string o null,"amount":number (total a pagar, decimal amb punt) o null,"litres":number o null,' +
+  '"business_name":string o null,"category":un de "dietes","gastos","bascules","peatges","combustible" o null}. ' +
   "El camp cif és el NIF/CIF fiscal que aparegui al document (format espanyol, ex. B12345678 o 12345678Z). " +
+  "Si és un tiquet de benzinera/gasoil, category=combustible i omple litres amb els litres repostats. " +
   "Si el document és una factura (hi surt un CIF i un número de factura), omple invoice_number; si és un simple tiquet, omple ticket_number. " +
   "Dates en format dia/mes/any i decimals amb coma. Retorna com a amount el TOTAL final. " +
   "Restaurant o bar => dietes; peatge d'autopista => peatges; pesatge/bàscula => bascules; altrament gastos. Si no pots llegir un camp, null.";

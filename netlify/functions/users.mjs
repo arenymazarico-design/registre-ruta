@@ -19,16 +19,26 @@ export default async (req) => {
     // Amb sessió retorna la llista (amb PIN si qui ho demana és administrador).
     if (req.method === 'GET') {
       if (!me) return json({ count });
+      function veh(v) { try { return v ? JSON.parse(v) : []; } catch (e) { return []; } }
       if (me.role === 'admin') {
-        const rows = await sql`select id, name, role, pin_plain from users order by name asc`;
-        return json({ users: rows.map((u) => ({ id: u.id, name: u.name, role: u.role, pin: u.pin_plain || '' })) });
+        const rows = await sql`select id, name, role, pin_plain, vehicles from users order by name asc`;
+        return json({ users: rows.map((u) => ({ id: u.id, name: u.name, role: u.role, pin: u.pin_plain || '', vehicles: veh(u.vehicles) })) });
       }
-      const rows = await sql`select id, name, role from users order by name asc`;
-      return json({ users: rows });
+      const rows = await sql`select id, name, role, vehicles from users order by name asc`;
+      return json({ users: rows.map((u) => ({ id: u.id, name: u.name, role: u.role, vehicles: veh(u.vehicles) })) });
     }
 
     if (req.method === 'POST') {
       const b = await req.json();
+
+      // Afegir/treure vehicles (matrícules). L'usuari els seus; l'admin els de qualsevol.
+      if (Array.isArray(b.setVehicles)) {
+        if (!me) return json({ error: 'No autenticat' }, 401);
+        const targetId = (b.id && me.role === 'admin') ? b.id : me.uid;
+        const clean = b.setVehicles.map(function (x) { return String(x).trim().toUpperCase(); }).filter(Boolean);
+        await sql`update users set vehicles=${JSON.stringify(clean)} where id=${targetId}`;
+        return json({ ok: true });
+      }
 
       // Canvi de la pròpia contrasenya (qualsevol usuari amb sessió).
       if (b.changePin) {

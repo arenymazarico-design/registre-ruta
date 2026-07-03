@@ -13,6 +13,7 @@ function rowToClient(r) {
     amount: Number(r.amount), ticket: r.ticket_no || '', place: r.place || '', cif: r.cif || '',
     date: (r.date instanceof Date ? r.date.toISOString().slice(0, 10) : String(r.date).slice(0, 10)),
     companions: r.companions || '', notes: r.notes || '',
+    litres: r.litres != null ? Number(r.litres) : null, km: r.km != null ? Number(r.km) : null,
     photo: r.photo_url || null, accounted: !!r.accounted,
     createdAt: r.created_at ? new Date(r.created_at).getTime() : 0
   };
@@ -78,9 +79,11 @@ export default async (req) => {
       const id = uid();
       let photoUrl = null;
       if (b.photoBase64) { await photos().set(id, b.photoBase64); photoUrl = '/api/photo?id=' + id; }
-      await sql`insert into tickets (id,user_id,user_name,cat,amount,ticket_no,place,cif,date,companions,notes,photo_url)
+      const litresIn = (b.cat === 'combustible' && b.litres !== '' && b.litres != null && !isNaN(Number(b.litres))) ? Number(b.litres) : null;
+      const kmIn = (b.cat === 'combustible' && b.km !== '' && b.km != null && !isNaN(Number(b.km))) ? Number(b.km) : null;
+      await sql`insert into tickets (id,user_id,user_name,cat,amount,ticket_no,place,cif,date,companions,notes,photo_url,litres,km)
         values (${id},${me.uid},${me.name},${b.cat},${Number(b.amount)},${b.ticket_no || ''},${b.place || ''},${b.cif || ''},
-        ${b.date},${b.cat === 'dietes' ? (b.companions || '') : ''},${b.notes || ''},${photoUrl})`;
+        ${b.date},${b.cat === 'dietes' ? (b.companions || '') : ''},${b.notes || ''},${photoUrl},${litresIn},${kmIn})`;
 
       // enviament automàtic (amb motiu si no s'envia)
       const cfg = (await sql`select email from app_config where id=1`)[0] || {};
@@ -127,9 +130,11 @@ export default async (req) => {
       if (me.role !== 'admin' && cur.user_id !== me.uid) return json({ error: 'Sense permís' }, 403);
       let photoUrl = cur.photo_url;
       if (b.photoBase64) { await photos().set(b.id, b.photoBase64); photoUrl = '/api/photo?id=' + b.id; }
+      const litresUp = (b.cat === 'combustible' && b.litres !== '' && b.litres != null && !isNaN(Number(b.litres))) ? Number(b.litres) : null;
+      const kmUp = (b.cat === 'combustible' && b.km !== '' && b.km != null && !isNaN(Number(b.km))) ? Number(b.km) : null;
       await sql`update tickets set cat=${b.cat}, amount=${Number(b.amount)}, ticket_no=${b.ticket_no || ''},
         place=${b.place || ''}, cif=${b.cif || ''}, date=${b.date}, companions=${b.cat === 'dietes' ? (b.companions || '') : ''},
-        notes=${b.notes || ''}, photo_url=${photoUrl} where id=${b.id}`;
+        notes=${b.notes || ''}, photo_url=${photoUrl}, litres=${litresUp}, km=${kmUp} where id=${b.id}`;
       return json({ ok: true, id: b.id });
     }
 
