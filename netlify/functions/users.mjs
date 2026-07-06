@@ -21,15 +21,37 @@ export default async (req) => {
       if (!me) return json({ count });
       function veh(v) { try { return v ? JSON.parse(v) : []; } catch (e) { return []; } }
       if (me.role === 'admin') {
-        const rows = await sql`select id, name, role, pin_plain, vehicles from users order by name asc`;
-        return json({ users: rows.map((u) => ({ id: u.id, name: u.name, role: u.role, pin: u.pin_plain || '', vehicles: veh(u.vehicles) })) });
+        const rows = await sql`select id, name, role, pin_plain, vehicles, active_plate, main_plate from users order by name asc`;
+        return json({ users: rows.map((u) => ({ id: u.id, name: u.name, role: u.role, pin: u.pin_plain || '', vehicles: veh(u.vehicles), activePlate: u.active_plate || '', mainPlate: u.main_plate || '' })) });
       }
-      const rows = await sql`select id, name, role, vehicles from users order by name asc`;
-      return json({ users: rows.map((u) => ({ id: u.id, name: u.name, role: u.role, vehicles: veh(u.vehicles) })) });
+      const rows = await sql`select id, name, role, vehicles, active_plate, main_plate from users order by name asc`;
+      return json({ users: rows.map((u) => ({ id: u.id, name: u.name, role: u.role, vehicles: veh(u.vehicles), activePlate: u.active_plate || '', mainPlate: u.main_plate || '' })) });
     }
 
     if (req.method === 'POST') {
       const b = await req.json();
+
+      // Marcar el vehicle habitual (principal).
+      if (b.setMainPlate !== undefined) {
+        if (!me) return json({ error: 'No autenticat' }, 401);
+        const plate = String(b.setMainPlate || '').trim().toUpperCase();
+        const cur = (await sql`select vehicles from users where id=${me.uid}`)[0] || {};
+        let list = []; try { list = cur.vehicles ? JSON.parse(cur.vehicles) : []; } catch (e) { list = []; }
+        if (plate && list.indexOf(plate) < 0) list.push(plate);
+        await sql`update users set main_plate=${plate}, vehicles=${JSON.stringify(list)} where id=${me.uid}`;
+        return json({ ok: true });
+      }
+
+      // Activar un vehicle (matrícula activa). L'afegeix a la llista si no hi és.
+      if (b.setActivePlate !== undefined) {
+        if (!me) return json({ error: 'No autenticat' }, 401);
+        const plate = String(b.setActivePlate || '').trim().toUpperCase();
+        const cur = (await sql`select vehicles from users where id=${me.uid}`)[0] || {};
+        let list = []; try { list = cur.vehicles ? JSON.parse(cur.vehicles) : []; } catch (e) { list = []; }
+        if (plate && list.indexOf(plate) < 0) list.push(plate);
+        await sql`update users set active_plate=${plate}, vehicles=${JSON.stringify(list)} where id=${me.uid}`;
+        return json({ ok: true });
+      }
 
       // Afegir/treure vehicles (matrícules). L'usuari els seus; l'admin els de qualsevol.
       if (Array.isArray(b.setVehicles)) {

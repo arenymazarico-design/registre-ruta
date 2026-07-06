@@ -3,7 +3,7 @@ import { auth, json, uid } from './_auth.mjs';
 
 function rowToClient(r) {
   return {
-    id: r.id, userId: r.user_id, user: r.user_name, ym: r.ym,
+    id: r.id, userId: r.user_id, user: r.user_name, ym: r.ym, plate: r.plate || '',
     date: (r.date instanceof Date ? r.date.toISOString().slice(0, 10) : String(r.date).slice(0, 10)),
     km: r.km != null ? Number(r.km) : null
   };
@@ -22,20 +22,22 @@ export default async (req) => {
       return json({ readings: rows.map(rowToClient) });
     }
 
-    // POST: apuntar/actualitzar la lectura del mes (una per usuari i mes).
+    // POST: apuntar/actualitzar la lectura del mes (una per usuari, matrícula i mes).
     if (req.method === 'POST') {
       const b = await req.json();
       if (b.km == null || isNaN(Number(b.km))) return json({ error: 'Km no vàlids' }, 400);
       const date = b.date || new Date().toISOString().slice(0, 10);
       const ym = date.slice(0, 7);
       const km = Number(b.km);
-      const exists = (await sql`select id from readings where user_id=${me.uid} and ym=${ym}`)[0];
+      const u = (await sql`select active_plate from users where id=${me.uid}`)[0] || {};
+      const plate = (b.plate != null ? String(b.plate) : (u.active_plate || '')).trim().toUpperCase();
+      const exists = (await sql`select id from readings where user_id=${me.uid} and ym=${ym} and coalesce(plate,'')=${plate}`)[0];
       if (exists) {
         await sql`update readings set km=${km}, date=${date} where id=${exists.id}`;
         return json({ ok: true, id: exists.id });
       }
       const id = uid();
-      await sql`insert into readings (id,user_id,user_name,ym,date,km) values (${id},${me.uid},${me.name},${ym},${date},${km})`;
+      await sql`insert into readings (id,user_id,user_name,ym,date,km,plate) values (${id},${me.uid},${me.name},${ym},${date},${km},${plate})`;
       return json({ ok: true, id });
     }
 

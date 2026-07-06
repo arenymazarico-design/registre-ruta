@@ -18,6 +18,8 @@ export async function ensure() {
   )`;
   await sql`alter table users add column if not exists pin_plain text`;
   await sql`alter table users add column if not exists vehicles text default ''`;
+  await sql`alter table users add column if not exists active_plate text default ''`;
+  await sql`alter table users add column if not exists main_plate text default ''`;
   await sql`create table if not exists tickets (
     id text primary key,
     user_id text,
@@ -36,6 +38,7 @@ export async function ensure() {
   await sql`alter table tickets add column if not exists cif text`;
   await sql`alter table tickets add column if not exists litres numeric(10,2)`;
   await sql`alter table tickets add column if not exists km numeric(10,1)`;
+  await sql`alter table tickets add column if not exists plate text default ''`;
   await sql`create table if not exists readings (
     id text primary key,
     user_id text,
@@ -44,7 +47,9 @@ export async function ensure() {
     date date,
     km numeric(10,1)
   )`;
-  await sql`create unique index if not exists readings_user_ym on readings (user_id, ym)`;
+  await sql`alter table readings add column if not exists plate text default ''`;
+  await sql`drop index if exists readings_user_ym`;
+  await sql`create unique index if not exists readings_user_plate_ym on readings (user_id, plate, ym)`;
   await sql`create table if not exists app_config (
     id int primary key default 1,
     email text default '',

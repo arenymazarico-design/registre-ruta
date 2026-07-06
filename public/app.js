@@ -10,7 +10,7 @@
   };
   var CAT_KEYS = Object.keys(CATS);
   var EXPENSE_KEYS = CAT_KEYS.filter(function (k) { return k !== "combustible"; });
-  var APP_VERSION = "2025-07-03 · km-tab";
+  var APP_VERSION = "2025-07-03 · vehicle-habitual";
 
   // ---------- Idioma (català per defecte / castellà) ----------
   var lang = localStorage.getItem("lang") || "ca";
@@ -88,7 +88,13 @@
     "Vehicles de l'usuari": "Vehículos del usuario",
     "Combustible i km": "Combustible y km", "Repostatge (foto)": "Repostaje (foto)", "Sense foto": "Sin foto",
     "Repostatges": "Repostajes", "Repostatges (tots)": "Repostajes (todos)", "Cap repostatge encara.": "Sin repostajes todavía.",
-    "Informe de km i consum": "Informe de km y consumo", "Repostatge": "Repostaje", "Gasolinera": "Gasolinera"
+    "Informe de km i consum": "Informe de km y consumo", "Repostatge": "Repostaje", "Gasolinera": "Gasolinera",
+    "Activar vehicle de substitució": "Activar vehículo de sustitución", "Matrícula del vehicle": "Matrícula del vehículo",
+    "Km actuals del comptador": "Km actuales del cuentakilómetros", "Activar i desar km": "Activar y guardar km",
+    "Mentre estigui actiu, tot el que entris s'assignarà a aquesta matrícula.": "Mientras esté activo, todo lo que introduzcas se asignará a esta matrícula.",
+    "Cap vehicle actiu": "Sin vehículo activo", "Toca una matrícula per activar-la. 🏠 = habitual.": "Toca una matrícula para activarla. 🏠 = habitual.",
+    "Vehicle habitual": "Vehículo habitual",
+    "Posa la matrícula": "Pon la matrícula", "Totes les matrícules": "Todas las matrículas", "(sense matrícula)": "(sin matrícula)", "Matrícula": "Matrícula"
   };
   var translating = false;
   function translateNode(node) {
@@ -850,9 +856,9 @@
   el("closeExp").onclick = closeExport; el("expScrim").onclick = closeExport;
 
   // ---------- Informe de km i combustible (km per lectures mensuals) ----------
-  var km = { users: [], from: "", to: "", group: false };
+  var km = { users: [], from: "", to: "", group: false, plate: "" };
   var kmUserQuery = "";
-  function openKm() { kmUserQuery = ""; renderKm(); el("kmScrim").setAttribute("data-open", "true"); el("kmSheet").setAttribute("data-open", "true"); }
+  function openKm() { kmUserQuery = ""; km.plate = ""; renderKm(); el("kmScrim").setAttribute("data-open", "true"); el("kmSheet").setAttribute("data-open", "true"); }
   function closeKm() { el("kmScrim").removeAttribute("data-open"); el("kmSheet").removeAttribute("data-open"); }
   el("closeKm").onclick = closeKm; el("kmScrim").onclick = closeKm;
   function fmt(n, d) { return (n || 0).toLocaleString("ca-ES", { minimumFractionDigits: d, maximumFractionDigits: d }); }
@@ -865,7 +871,7 @@
   function nextMonthFirst(ym) { var y = +ym.slice(0, 4), m = +ym.slice(5, 7) + 1; if (m > 12) { m = 1; y++; } return y + "-" + String(m).padStart(2, "0") + "-01"; }
   function monthsBetween(fy, ty) { var out = [], y = +fy.slice(0, 4), m = +fy.slice(5, 7), ey = +ty.slice(0, 4), em = +ty.slice(5, 7), g = 0; while ((y < ey || (y === ey && m <= em)) && g < 600) { out.push(y + "-" + String(m).padStart(2, "0")); m++; if (m > 12) { m = 1; y++; } g++; } return out; }
 
-  function readingsOf(userId) { return readings.filter(function (r) { return r.userId === userId && r.km != null; }).slice().sort(function (a, b) { return dayNum(a.date) - dayNum(b.date); }); }
+  function readingsOf(userId) { return readings.filter(function (r) { return r.userId === userId && r.km != null && (!km.plate || (r.plate || "") === km.plate); }).slice().sort(function (a, b) { return dayNum(a.date) - dayNum(b.date); }); }
   function kmAt(userId, dateStr) {
     var r = readingsOf(userId);
     if (!r.length) return null;
@@ -882,7 +888,13 @@
     return total;
   }
   function scopeUsers() { if (!admin) return [me.id]; if (km.users.length) return km.users.slice(); return roster.map(function (u) { return u.id; }); }
-  function fuelInRange(scope, a, b) { return entries.filter(function (e) { return e.cat === "combustible" && scope.indexOf(e.userId) >= 0 && e.date >= a && e.date <= b; }); }
+  function fuelInRange(scope, a, b) { return entries.filter(function (e) { return e.cat === "combustible" && scope.indexOf(e.userId) >= 0 && e.date >= a && e.date <= b && (!km.plate || (e.plate || "") === km.plate); }); }
+  function platesInScope() {
+    var scope = scopeUsers(), set = {}, out = [];
+    entries.forEach(function (e) { if (e.cat === "combustible" && scope.indexOf(e.userId) >= 0) { var p = e.plate || ""; if (!(p in set)) { set[p] = 1; out.push(p); } } });
+    readings.forEach(function (r) { if (scope.indexOf(r.userId) >= 0) { var p = r.plate || ""; if (!(p in set)) { set[p] = 1; out.push(p); } } });
+    return out.sort();
+  }
   function litresSum(l) { return l.reduce(function (s, e) { return s + (e.litres || 0); }, 0); }
   function costSum(l) { return l.reduce(function (s, e) { return s + (e.amount || 0); }, 0); }
   function rangeBounds() {
@@ -956,7 +968,7 @@
     var fuelListHtml = '<label style="display:block;font-size:12px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--muted);margin:4px 0 6px">Repostatges' + (admin ? " (tots)" : "") + '</label>';
     fuelListHtml += myFuel.length ? myFuel.slice(0, 60).map(function (e) {
       return '<div class="fuelrow" data-id="' + e.id + '" style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 12px;border:1px solid var(--line);border-radius:11px;margin-bottom:7px;cursor:pointer">' +
-        '<div style="min-width:0"><b style="font-size:14px">' + esc(e.place || "Gasolinera") + '</b><div style="font-size:12px;color:var(--muted)">' + e.date + (admin ? " · " + esc(e.user) : "") + '</div></div>' +
+        '<div style="min-width:0"><b style="font-size:14px">' + esc(e.place || "Gasolinera") + '</b><div style="font-size:12px;color:var(--muted)">' + e.date + (admin ? " · " + esc(e.user) : "") + (e.plate ? " · " + esc(e.plate) : "") + '</div></div>' +
         '<div style="text-align:right;white-space:nowrap"><div style="font-family:var(--mono);font-weight:700">' + (e.litres != null ? fmt(e.litres, 2) + " L" : "") + '</div><div style="font-size:12px;color:var(--muted)">' + eur(e.amount) + '</div></div></div>';
     }).join("") : '<p style="font-size:13px;color:var(--muted);margin:0 0 8px">Cap repostatge encara.</p>';
 
@@ -972,12 +984,15 @@
     var actions = '<div class="actions" style="margin-top:14px"><button type="button" class="btn-primary" id="kmXls">Exportar a Excel</button><button type="button" class="btn-danger" id="kmPrint" style="border-color:var(--line);color:var(--ink-soft)">Imprimir</button></div>';
     var note = '<p style="font-size:12px;color:var(--muted);margin:10px 0 0">El símbol ~ indica un mes amb km estimats (filtre no complet o falten lectures). Els km surten de les lectures mensuals del comptador.</p>';
     var sep = '<div style="height:1px;background:var(--line);margin:16px 0"></div><label style="display:block;font-size:12px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Informe de km i consum</label>';
-    el("kmBody").innerHTML = addBtns + fuelListHtml + sep + filters + '<div class="repwrap" id="kmReport"></div>' + note + actions;
+    var plates = platesInScope();
+    var plateSel = plates.length ? ('<div class="field"><label for="kmPlate">Matrícula</label><select id="kmPlate"><option value="">Totes les matrícules</option>' + plates.map(function (p) { return '<option value="' + esc(p) + '"' + (km.plate === p ? ' selected' : '') + '>' + (p ? esc(p) : '(sense matrícula)') + '</option>'; }).join("") + '</select></div>') : '';
+    el("kmBody").innerHTML = addBtns + fuelListHtml + sep + filters + plateSel + '<div class="repwrap" id="kmReport"></div>' + note + actions;
     renderKmReport();
 
     el("fuAddPhoto").onclick = function () { pendingFuel = true; retakeMode = false; pendingPhoto = null; closeKm(); el("photo").value = ""; el("photo").click(); };
     el("fuAddManual").onclick = function () { pendingFuel = true; pendingPhoto = null; closeKm(); openSheetNew(null, false); };
     el("kmBody").querySelectorAll(".fuelrow").forEach(function (r) { r.onclick = function () { openSheet(r.getAttribute("data-id")); }; });
+    var kp = el("kmPlate"); if (kp) kp.onchange = function () { km.plate = kp.value; renderKmReport(); };
 
     if (admin) {
       var us = el("kmUserSearch"); if (us) us.oninput = function () { kmUserQuery = us.value; refreshKmMsel(); };
@@ -1014,9 +1029,11 @@
   }
 
   // ---------- Lectura mensual de km + recordatori ----------
+  function myActivePlate() { var u = roster.filter(function (x) { return x.id === me.id; })[0]; return (u && u.activePlate) ? u.activePlate : ""; }
   function openRead() {
     var today = todayStr(); el("readDate").value = today;
-    var ym = today.slice(0, 7); var ex = readings.filter(function (r) { return r.userId === me.id && r.ym === ym; })[0];
+    var ym = today.slice(0, 7), ap = myActivePlate();
+    var ex = readings.filter(function (r) { return r.userId === me.id && r.ym === ym && (r.plate || "") === ap; })[0];
     el("readKm").value = ex ? ex.km : "";
     el("readScrim").setAttribute("data-open", "true"); el("readSheet").setAttribute("data-open", "true");
   }
@@ -1028,7 +1045,7 @@
     try { await api("/api/readings", "POST", { km: Number(v), date: el("readDate").value || todayStr() }); await loadReadings(); closeRead(); hideKmReminder(); toast("Km desats"); }
     catch (e) { toast(e.message, { error: true }); }
   };
-  function hasReadingThisMonth() { var ym = todayStr().slice(0, 7); return readings.some(function (r) { return r.userId === me.id && r.ym === ym; }); }
+  function hasReadingThisMonth() { var ym = todayStr().slice(0, 7), ap = myActivePlate(); return readings.some(function (r) { return r.userId === me.id && r.ym === ym && (r.plate || "") === ap; }); }
   function showKmReminder() { if (me && !hasReadingThisMonth()) el("kmReminder").setAttribute("data-show", "true"); }
   function hideKmReminder() { el("kmReminder").removeAttribute("data-show"); }
   el("kmReminderGo").onclick = function () { hideKmReminder(); openRead(); };
@@ -1048,24 +1065,69 @@
   function closeVeh() { el("vehScrim").removeAttribute("data-open"); el("vehSheet").removeAttribute("data-open"); }
   el("closeVeh").onclick = closeVeh; el("vehScrim").onclick = closeVeh;
   function renderVeh() {
-    var chips = vehTmp.length ? vehTmp.map(function (p, i) { return '<span class="mtag">' + esc(p) + '<b data-i="' + i + '">✕</b></span>'; }).join("") : '<span style="font-size:13px;color:var(--muted)">Cap vehicle</span>';
+    var self = !vehTarget;
+    var u = roster.filter(function (x) { return x.id === (vehTarget || me.id); })[0];
+    var active = (u && u.activePlate) ? u.activePlate : "";
+    var main = (u && u.mainPlate) ? u.mainPlate : (vehTmp[0] || "");
+    var chips = vehTmp.length ? vehTmp.map(function (p, i) {
+      var on = (p === active);
+      return '<span class="mtag" data-p="' + esc(p) + '" style="cursor:pointer;' + (on ? 'background:var(--amber)' : '') + '">' + (on ? '★ ' : '') + esc(p) + (p === main ? ' 🏠' : '') + '<b data-i="' + i + '">✕</b></span>';
+    }).join("") : '<span style="font-size:13px;color:var(--muted)">Cap vehicle</span>';
+    var subActive = self && active && main && active !== main;
+    var activeLine = self ? (active ? '<p style="font-size:14px;margin:0 0 4px">Vehicle actiu: <b>' + esc(active) + '</b>' + (subActive ? ' (substitució)' : '') + '</p>' : '<p style="font-size:13px;color:var(--muted);margin:0 0 4px">Cap vehicle actiu</p>') : '';
+    var returnBtn = subActive ? '<button type="button" class="btn-primary" id="vehReturn" style="width:100%;margin:6px 0 12px">↩︎ Tornar al vehicle habitual (' + esc(main) + ')</button>' : '';
+    var mainSel = (self && vehTmp.length) ?
+      '<div class="field" style="margin-top:8px"><label for="vehMain">Vehicle habitual</label><select id="vehMain">' +
+      vehTmp.map(function (p) { return '<option value="' + esc(p) + '"' + (p === main ? ' selected' : '') + '>' + esc(p) + '</option>'; }).join("") + '</select></div>' : '';
+    var actForm = self ?
+      '<button type="button" class="btn-ghost" id="vehActivate" style="width:100%;margin-bottom:8px">🔄 Activar vehicle de substitució</button>' +
+      '<div id="vehActForm" style="display:none;border:1.5px solid var(--amber);border-radius:12px;padding:12px;margin-bottom:12px">' +
+      '<div class="field"><label for="vehActPlate">Matrícula del vehicle</label><input id="vehActPlate" type="text" autocomplete="off" placeholder="Matrícula" style="text-transform:uppercase"></div>' +
+      '<div class="field"><label for="vehActKm">Km actuals del comptador</label><input id="vehActKm" type="number" inputmode="numeric" step="1" min="0" placeholder="0"></div>' +
+      '<button type="button" class="btn-primary" id="vehActGo" style="width:100%">Activar i desar km</button>' +
+      '<p style="font-size:12px;color:var(--muted);margin:8px 0 0">Mentre estigui actiu, tot el que entris s\'assignarà a aquesta matrícula.</p></div>' : '';
     el("vehBody").innerHTML =
+      activeLine + returnBtn +
       '<div class="msel-tags" style="margin-bottom:12px">' + chips + '</div>' +
+      (self ? '<p style="font-size:12px;color:var(--muted);margin:-4px 0 12px">Toca una matrícula per activar-la. 🏠 = habitual.</p>' : '') +
       '<div style="display:flex;gap:8px;margin-bottom:14px"><input id="vehInput" type="text" placeholder="Matrícula (ex. 1234ABC)" autocomplete="off" style="flex:1;border:1.5px solid var(--line);border-radius:11px;padding:12px 14px;font-size:16px;text-transform:uppercase"><button type="button" class="btn-ghost" id="vehAdd" style="width:auto;padding:12px 18px">Afegir</button></div>' +
+      mainSel + actForm +
       '<button type="button" class="btn-primary" id="vehSave" style="width:100%">Desa els vehicles</button>';
-    el("vehBody").querySelectorAll("[data-i]").forEach(function (b) { b.onclick = function () { vehTmp.splice(+b.getAttribute("data-i"), 1); renderVeh(); }; });
+    el("vehBody").querySelectorAll("[data-i]").forEach(function (b) { b.onclick = function (ev) { ev.stopPropagation(); vehTmp.splice(+b.getAttribute("data-i"), 1); renderVeh(); }; });
+    if (self) el("vehBody").querySelectorAll(".mtag").forEach(function (s) { s.onclick = function () { showActForm(s.getAttribute("data-p")); }; });
     var add = function () { var v = (el("vehInput").value || "").trim().toUpperCase(); if (!v) return; if (vehTmp.indexOf(v) < 0) vehTmp.push(v); el("vehInput").value = ""; renderVeh(); var i = el("vehInput"); if (i) i.focus(); };
     el("vehAdd").onclick = add;
     el("vehInput").addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); add(); } });
+    if (self) {
+      el("vehActivate").onclick = function () { showActForm(""); };
+      el("vehActGo").onclick = activateVehicle;
+      var rb = el("vehReturn"); if (rb) rb.onclick = function () { showActForm(main); };
+      var ms = el("vehMain"); if (ms) ms.onchange = async function () { try { await api("/api/users", "POST", { setMainPlate: ms.value }); await loadRoster(); var u2 = roster.filter(function (x) { return x.id === me.id; })[0]; vehTmp = (u2 && u2.vehicles) ? u2.vehicles.slice() : []; renderVeh(); toast("Vehicle habitual: " + ms.value); } catch (e) { toast(e.message, { error: true }); } };
+    }
     el("vehSave").onclick = async function () {
-      try {
-        var payload = { setVehicles: vehTmp };
-        if (vehTarget) payload.id = vehTarget;
-        await api("/api/users", "POST", payload);
-        await loadRoster();
-        closeVeh(); toast("Vehicles desats");
-      } catch (e) { toast(e.message, { error: true }); }
+      try { var payload = { setVehicles: vehTmp }; if (vehTarget) payload.id = vehTarget; await api("/api/users", "POST", payload); await loadRoster(); closeVeh(); toast("Vehicles desats"); }
+      catch (e) { toast(e.message, { error: true }); }
     };
+  }
+  function showActForm(plate) {
+    var f = el("vehActForm"); if (!f) return;
+    f.style.display = "block";
+    el("vehActPlate").value = plate || "";
+    el("vehActKm").value = "";
+    (plate ? el("vehActKm") : el("vehActPlate")).focus();
+  }
+  async function activateVehicle() {
+    var plate = (el("vehActPlate").value || "").trim().toUpperCase();
+    var kmv = el("vehActKm").value;
+    if (!plate) { toast("Posa la matrícula", { error: true }); return; }
+    if (kmv === "" || isNaN(Number(kmv))) { toast("Posa els km", { error: true }); return; }
+    try {
+      await api("/api/users", "POST", { setActivePlate: plate });
+      await api("/api/readings", "POST", { km: Number(kmv) });
+      await loadRoster(); await loadReadings();
+      var u2 = roster.filter(function (x) { return x.id === me.id; })[0]; vehTmp = (u2 && u2.vehicles) ? u2.vehicles.slice() : [];
+      renderVeh(); toast("Vehicle actiu: " + plate);
+    } catch (e) { toast(e.message, { error: true }); }
   }
 
   function openImg(src) { el("imgviewImg").src = src; el("imgview").setAttribute("data-open", "true"); }

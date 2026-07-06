@@ -14,6 +14,7 @@ function rowToClient(r) {
     date: (r.date instanceof Date ? r.date.toISOString().slice(0, 10) : String(r.date).slice(0, 10)),
     companions: r.companions || '', notes: r.notes || '',
     litres: r.litres != null ? Number(r.litres) : null, km: r.km != null ? Number(r.km) : null,
+    plate: r.plate || '',
     photo: r.photo_url || null, accounted: !!r.accounted,
     createdAt: r.created_at ? new Date(r.created_at).getTime() : 0
   };
@@ -81,9 +82,11 @@ export default async (req) => {
       if (b.photoBase64) { await photos().set(id, b.photoBase64); photoUrl = '/api/photo?id=' + id; }
       const litresIn = (b.cat === 'combustible' && b.litres !== '' && b.litres != null && !isNaN(Number(b.litres))) ? Number(b.litres) : null;
       const kmIn = (b.cat === 'combustible' && b.km !== '' && b.km != null && !isNaN(Number(b.km))) ? Number(b.km) : null;
-      await sql`insert into tickets (id,user_id,user_name,cat,amount,ticket_no,place,cif,date,companions,notes,photo_url,litres,km)
+      const au = (await sql`select active_plate from users where id=${me.uid}`)[0] || {};
+      const plateIn = (au.active_plate || '').trim().toUpperCase();
+      await sql`insert into tickets (id,user_id,user_name,cat,amount,ticket_no,place,cif,date,companions,notes,photo_url,litres,km,plate)
         values (${id},${me.uid},${me.name},${b.cat},${Number(b.amount)},${b.ticket_no || ''},${b.place || ''},${b.cif || ''},
-        ${b.date},${b.cat === 'dietes' ? (b.companions || '') : ''},${b.notes || ''},${photoUrl},${litresIn},${kmIn})`;
+        ${b.date},${b.cat === 'dietes' ? (b.companions || '') : ''},${b.notes || ''},${photoUrl},${litresIn},${kmIn},${plateIn})`;
 
       // enviament automàtic (amb motiu si no s'envia)
       const cfg = (await sql`select email from app_config where id=1`)[0] || {};
