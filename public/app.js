@@ -10,7 +10,7 @@
   };
   var CAT_KEYS = Object.keys(CATS);
   var EXPENSE_KEYS = CAT_KEYS.filter(function (k) { return k !== "combustible"; });
-  var APP_VERSION = "2025-07-03 · combustible-apart";
+  var APP_VERSION = "2025-07-03 · km-tab";
 
   // ---------- Idioma (català per defecte / castellà) ----------
   var lang = localStorage.getItem("lang") || "ca";
@@ -285,7 +285,7 @@
       userSel = '<select id="userFilter" class="chip" style="appearance:auto"><option value="tots"' + (userFilter === "tots" ? " selected" : "") + '>Tots els usuaris</option>' +
         roster.map(function (u) { return '<option value="' + u.id + '"' + (userFilter === u.id ? " selected" : "") + '>' + esc(u.name) + '</option>'; }).join("") + '</select>';
     }
-    return '<div class="toolbar">' + chips + '<span class="spacer"></span>' + userSel + '<button class="expbtn" id="openExp">Consulta</button></div>';
+    return '<div class="toolbar">' + chips + '<span class="spacer"></span>' + userSel + '<button class="expbtn" id="openKmBtn">⛽ km</button><button class="expbtn" id="openExp">Consulta</button></div>';
   }
 
   function renderList(mes) {
@@ -322,6 +322,7 @@
     var mb = el("manualBtn"); if (mb) mb.onclick = function () { pendingPhoto = null; openSheetNew(null, false); };
     el("avatarBtn").onclick = openMenu;
     el("openExp").onclick = openExport;
+    el("openKmBtn").onclick = openKm;
     el("root").querySelectorAll(".fc").forEach(function (c) { c.onclick = function () { filter = c.getAttribute("data-k"); render(); }; });
     var uf = el("userFilter"); if (uf) uf.onchange = function () { userFilter = uf.value; render(); };
   }
