@@ -9,7 +9,8 @@
     combustible: { label: "Combustible", color: "var(--c-combustible)" }
   };
   var CAT_KEYS = Object.keys(CATS);
-  var APP_VERSION = "2025-07-03 · vehicles";
+  var EXPENSE_KEYS = CAT_KEYS.filter(function (k) { return k !== "combustible"; });
+  var APP_VERSION = "2025-07-03 · combustible-apart";
 
   // ---------- Idioma (català per defecte / castellà) ----------
   var lang = localStorage.getItem("lang") || "ca";
@@ -84,7 +85,10 @@
     "El símbol ~ indica un mes amb km estimats (filtre no complet o falten lectures). Els km surten de les lectures mensuals del comptador.": "El símbolo ~ indica un mes con km estimados (filtro incompleto o faltan lecturas). Los km salen de las lecturas mensuales del cuentakilómetros.",
     "Els meus vehicles": "Mis vehículos", "Cap vehicle": "Sin vehículo", "Afegir": "Añadir",
     "Desa els vehicles": "Guardar los vehículos", "Vehicles desats": "Vehículos guardados",
-    "Vehicles de l'usuari": "Vehículos del usuario"
+    "Vehicles de l'usuari": "Vehículos del usuario",
+    "Combustible i km": "Combustible y km", "Repostatge (foto)": "Repostaje (foto)", "Sense foto": "Sin foto",
+    "Repostatges": "Repostajes", "Repostatges (tots)": "Repostajes (todos)", "Cap repostatge encara.": "Sin repostajes todavía.",
+    "Informe de km i consum": "Informe de km y consumo", "Repostatge": "Repostaje", "Gasolinera": "Gasolinera"
   };
   var translating = false;
   function translateNode(node) {
@@ -192,7 +196,7 @@
 
   function visibleEntries() {
     var key = ym(view);
-    var list = entries.filter(function (e) { return ymOf(e.date) === key; });
+    var list = entries.filter(function (e) { return e.cat !== "combustible" && ymOf(e.date) === key; });
     if (!admin) list = list.filter(function (e) { return e.userId === me.id; });
     return list;
   }
@@ -255,9 +259,9 @@
   function renderApp() {
     var mes = visibleEntries();
     var total = mes.reduce(function (s, e) { return s + e.amount; }, 0);
-    var sums = {}; CAT_KEYS.forEach(function (k) { sums[k] = 0; });
+    var sums = {}; EXPENSE_KEYS.forEach(function (k) { sums[k] = 0; });
     mes.forEach(function (e) { if (sums[e.cat] != null) sums[e.cat] += e.amount; });
-    var bd = CAT_KEYS.map(function (k) { return '<div class="bd"><div class="n"><span class="dot" style="background:' + CATS[k].color + '"></span>' + CATS[k].label + '</div><div class="v">' + eur(sums[k]) + '</div></div>'; }).join("");
+    var bd = EXPENSE_KEYS.map(function (k) { return '<div class="bd"><div class="n"><span class="dot" style="background:' + CATS[k].color + '"></span>' + CATS[k].label + '</div><div class="v">' + eur(sums[k]) + '</div></div>'; }).join("");
 
     el("root").innerHTML =
       '<div class="wrap"><header>' +
@@ -274,7 +278,7 @@
   }
 
   function renderToolbar() {
-    var opts = [{ k: "tots", label: "Tots" }].concat(CAT_KEYS.map(function (k) { return { k: k, label: CATS[k].label }; }));
+    var opts = [{ k: "tots", label: "Tots" }].concat(EXPENSE_KEYS.map(function (k) { return { k: k, label: CATS[k].label }; }));
     var chips = opts.map(function (o) { var dot = o.k !== "tots" ? '<span class="cdot" style="background:' + CATS[o.k].color + '"></span>' : ''; return '<button class="chip fc" data-k="' + o.k + '" data-active="' + (filter === o.k) + '">' + dot + o.label + '</button>'; }).join("");
     var userSel = "";
     if (admin) {
@@ -328,7 +332,7 @@
     if (admin) items += '<button class="mi" id="miUsers">Gestionar usuaris</button>';
     if (admin) items += '<button class="mi" id="miConfig">Configuració</button>';
     items += '<button class="mi" id="miPin">Canviar contrasenya</button>';
-    items += '<button class="mi" id="miKm">Consulta de km</button>';
+    items += '<button class="mi" id="miKm">Combustible i km</button>';
     items += '<button class="mi" id="miVeh">Els meus vehicles</button>';
     items += '<button class="mi danger" id="miLogout">Tancar sessió</button>';
     items += '<div style="display:flex;gap:8px;justify-content:center;padding:12px">' +
@@ -564,7 +568,7 @@
 
   // ---------- Full de tiquet ----------
   function renderCatPick() {
-    el("catpick").innerHTML = CAT_KEYS.map(function (k) { return '<label style="color:' + CATS[k].color + '"><input type="radio" name="cat" value="' + k + '"' + (selectedCat === k ? " checked" : "") + '><div class="opt"><span class="sq" style="background:' + CATS[k].color + '"></span>' + CATS[k].label + '</div></label>'; }).join("");
+    el("catpick").innerHTML = EXPENSE_KEYS.map(function (k) { return '<label style="color:' + CATS[k].color + '"><input type="radio" name="cat" value="' + k + '"' + (selectedCat === k ? " checked" : "") + '><div class="opt"><span class="sq" style="background:' + CATS[k].color + '"></span>' + CATS[k].label + '</div></label>'; }).join("");
     document.querySelectorAll('input[name=cat]').forEach(function (r) { r.onchange = function () { selectedCat = r.value; toggleCompanions(); }; });
   }
   function toggleCompanions() {
@@ -592,10 +596,13 @@
     el("compCount").value = list.length; renderCompRows(list.length, list);
   }
 
+  var pendingFuel = false;
   function openSheetNew(parsed, fromAI) {
     el("entryForm").reset(); el("editId").value = ""; el("delBtn").style.display = "none";
-    el("sheetTitle").textContent = "Revisar tiquet"; el("aiHint").style.display = fromAI ? "flex" : "none";
-    selectedCat = (parsed && CATS[parsed.category]) ? parsed.category : "dietes"; renderCatPick(); toggleCompanions();
+    var isFuel = pendingFuel || (parsed && parsed.category === "combustible");
+    el("sheetTitle").textContent = isFuel ? "Repostatge" : "Revisar tiquet"; el("aiHint").style.display = fromAI ? "flex" : "none";
+    selectedCat = isFuel ? "combustible" : ((parsed && CATS[parsed.category] && parsed.category !== "combustible") ? parsed.category : "dietes");
+    renderCatPick(); el("catpick").style.display = isFuel ? "none" : "grid"; toggleCompanions();
     el("amount").value = (parsed && parsed.amount != null) ? parsed.amount : "";
     var cifVal = (parsed && parsed.cif) ? parsed.cif : "";
     el("ticket").value = parsed ? ((parsed.invoice_number || parsed.ticket_number) || "") : "";
@@ -605,11 +612,12 @@
     el("date").value = (parsed && parsed.date && /^\d{4}-\d{2}-\d{2}$/.test(parsed.date)) ? parsed.date : todayStr();
     el("compCount").value = 0; el("compList").innerHTML = ""; el("notes").value = ""; setThumb(pendingPhoto);
     el("acctRow").innerHTML = ""; setLock(false); openSheet_();
+    pendingFuel = false;
   }
   function openSheet(id) {
     var e = entries.filter(function (x) { return x.id === id; })[0]; if (!e) return;
     el("entryForm").reset(); el("aiHint").style.display = "none"; el("sheetTitle").textContent = "Editar registre";
-    el("editId").value = e.id; selectedCat = e.cat; renderCatPick(); toggleCompanions();
+    el("editId").value = e.id; selectedCat = e.cat; renderCatPick(); el("catpick").style.display = (e.cat === "combustible") ? "none" : "grid"; toggleCompanions();
     el("amount").value = e.amount; el("ticket").value = e.ticket || ""; el("place").value = e.place || "";
     el("cif").value = e.cif || ""; setNumberMode(!!e.cif);
     el("litres").value = (e.litres != null) ? e.litres : "";
@@ -644,7 +652,7 @@
   async function toggleAccounted(id, val) {
     try {
       await api("/api/tickets", "PUT", { id: id, setAccounted: val });
-      await loadEntries(); closeSheet(); render();
+      await loadEntries(); closeSheet(); render(); if (el("kmSheet").getAttribute("data-open")==="true") renderKm();
       toast(val ? "Marcat com a validat" : "Validació treta");
     } catch (e) { toast(e.message); }
   }
@@ -680,7 +688,7 @@
       if (id) { payload.id = id; res = await api("/api/tickets", "PUT", payload); }
       else res = await api("/api/tickets", "POST", payload);
       await loadEntries();
-      pendingPhoto = null; closeSheet(); render();
+      pendingPhoto = null; closeSheet(); render(); if (el("kmSheet").getAttribute("data-open")==="true") renderKm();
       var okMsg;
       if (id) okMsg = "Registre actualitzat";
       else if (res && res.emailed) okMsg = "Desat i enviat per correu";
@@ -698,7 +706,7 @@
   el("delBtn").onclick = async function () {
     var id = el("editId").value; if (!id) return;
     if (!confirm("Eliminar aquest registre?")) return;
-    try { await api("/api/tickets?id=" + encodeURIComponent(id), "DELETE"); await loadEntries(); pendingPhoto = null; closeSheet(); render(); toast("Registre eliminat"); }
+    try { await api("/api/tickets?id=" + encodeURIComponent(id), "DELETE"); await loadEntries(); pendingPhoto = null; closeSheet(); render(); if (el("kmSheet").getAttribute("data-open")==="true") renderKm(); toast("Registre eliminat"); }
     catch (e) { toast(e.message); }
   };
 
@@ -725,7 +733,7 @@
     });
   }
   function computeConsulta() {
-    var list = entries.slice(); // admin: tots; usuari: només els seus
+    var list = entries.filter(function (e) { return e.cat !== "combustible"; }); // despeses (el combustible va a part)
     if (admin && q.users.length) list = list.filter(function (e) { return q.users.indexOf(e.userId) >= 0; });
     if (q.cats.length) list = list.filter(function (e) { return q.cats.indexOf(e.cat) >= 0; });
     if (q.from) list = list.filter(function (e) { return e.date >= q.from; });
@@ -755,7 +763,7 @@
       '<div class="msel"><div class="msel-tags" id="qUserTags"></div><input id="qUserSearch" type="text" placeholder="Cerca usuari…" autocomplete="off"><div class="msel-list" id="qUserList"></div></div>' : '';
     var catBlock =
       '<label style="display:block;font-size:12px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--muted);margin:12px 0 6px">Tipus de gasto (pots triar-ne més d\'un)</label>' +
-      chipStrip(CAT_KEYS.map(function (k) { return { v: k, label: CATS[k].label }; }), q.cats, "Tots");
+      chipStrip(EXPENSE_KEYS.map(function (k) { return { v: k, label: CATS[k].label }; }), q.cats, "Tots");
     el("expBody").innerHTML =
       userBlock + catBlock +
       '<div class="grid2" style="margin-top:10px"><div class="field"><label for="qFrom">Des de</label><input id="qFrom" type="date" value="' + esc(q.from) + '"></div>' +
@@ -942,6 +950,15 @@
   }
   function renderKmReport() { el("kmReport").innerHTML = (admin && km.group) ? reportByUser() : reportMonthly(); }
   function renderKm() {
+    var addBtns = '<div class="actions" style="margin-bottom:12px"><button type="button" class="btn-primary" id="fuAddPhoto"><span class="cam">📷</span> Repostatge (foto)</button><button type="button" class="btn-ghost" id="fuAddManual" style="flex:0 0 auto;width:auto;padding:14px 18px">Sense foto</button></div>';
+    var myFuel = entries.filter(function (e) { return e.cat === "combustible" && (admin || e.userId === me.id); }).slice().sort(function (a, b) { return a.date < b.date ? 1 : -1; });
+    var fuelListHtml = '<label style="display:block;font-size:12px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--muted);margin:4px 0 6px">Repostatges' + (admin ? " (tots)" : "") + '</label>';
+    fuelListHtml += myFuel.length ? myFuel.slice(0, 60).map(function (e) {
+      return '<div class="fuelrow" data-id="' + e.id + '" style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 12px;border:1px solid var(--line);border-radius:11px;margin-bottom:7px;cursor:pointer">' +
+        '<div style="min-width:0"><b style="font-size:14px">' + esc(e.place || "Gasolinera") + '</b><div style="font-size:12px;color:var(--muted)">' + e.date + (admin ? " · " + esc(e.user) : "") + '</div></div>' +
+        '<div style="text-align:right;white-space:nowrap"><div style="font-family:var(--mono);font-weight:700">' + (e.litres != null ? fmt(e.litres, 2) + " L" : "") + '</div><div style="font-size:12px;color:var(--muted)">' + eur(e.amount) + '</div></div></div>';
+    }).join("") : '<p style="font-size:13px;color:var(--muted);margin:0 0 8px">Cap repostatge encara.</p>';
+
     var filters = "";
     if (admin) {
       filters =
@@ -953,8 +970,14 @@
     }
     var actions = '<div class="actions" style="margin-top:14px"><button type="button" class="btn-primary" id="kmXls">Exportar a Excel</button><button type="button" class="btn-danger" id="kmPrint" style="border-color:var(--line);color:var(--ink-soft)">Imprimir</button></div>';
     var note = '<p style="font-size:12px;color:var(--muted);margin:10px 0 0">El símbol ~ indica un mes amb km estimats (filtre no complet o falten lectures). Els km surten de les lectures mensuals del comptador.</p>';
-    el("kmBody").innerHTML = filters + '<div class="repwrap" id="kmReport"></div>' + note + actions;
+    var sep = '<div style="height:1px;background:var(--line);margin:16px 0"></div><label style="display:block;font-size:12px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Informe de km i consum</label>';
+    el("kmBody").innerHTML = addBtns + fuelListHtml + sep + filters + '<div class="repwrap" id="kmReport"></div>' + note + actions;
     renderKmReport();
+
+    el("fuAddPhoto").onclick = function () { pendingFuel = true; retakeMode = false; pendingPhoto = null; closeKm(); el("photo").value = ""; el("photo").click(); };
+    el("fuAddManual").onclick = function () { pendingFuel = true; pendingPhoto = null; closeKm(); openSheetNew(null, false); };
+    el("kmBody").querySelectorAll(".fuelrow").forEach(function (r) { r.onclick = function () { openSheet(r.getAttribute("data-id")); }; });
+
     if (admin) {
       var us = el("kmUserSearch"); if (us) us.oninput = function () { kmUserQuery = us.value; refreshKmMsel(); };
       el("kmFrom").onchange = function () { km.from = el("kmFrom").value; renderKmReport(); };
