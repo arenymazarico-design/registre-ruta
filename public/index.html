@@ -126,6 +126,9 @@
   .hint{font-size:12px;color:var(--muted);background:#fff7ec;border:1px solid #f3e2c6;border-radius:10px;padding:9px 12px;margin:0 18px 14px;display:flex;gap:8px;align-items:flex-start}
 
   .catpick{display:grid;grid-template-columns:repeat(2,1fr);gap:9px;margin-bottom:16px}
+  .modetoggle{display:flex;gap:8px;margin-bottom:14px}
+  .modetoggle .mbtn{flex:1;border:1.5px solid var(--line);background:var(--card);color:var(--muted);border-radius:11px;padding:11px;font-size:14px;font-weight:700;cursor:pointer}
+  .modetoggle .mbtn[data-active="true"]{background:var(--ink);color:#f4f1ea;border-color:var(--ink)}
   .catpick label{position:relative;cursor:pointer}
   .catpick input{position:absolute;opacity:0;inset:0}
   .catpick .opt{display:flex;align-items:center;gap:9px;padding:12px;border-radius:12px;background:var(--card);border:1.5px solid var(--line);font-weight:700;font-size:14px;color:var(--ink-soft)}
@@ -260,6 +263,7 @@
     <input type="hidden" id="editId">
     <div class="pad" style="padding-bottom:0">
       <div class="thumbrow" id="thumbrow" style="display:none"><img id="thumbImg" alt="tiquet"><div class="tt">Foto del tiquet</div><button type="button" class="retake" id="retakeBtn">Refer</button></div>
+      <div class="modetoggle" id="modeToggle"><button type="button" class="mbtn" data-m="despesa">Despesa</button><button type="button" class="mbtn" data-m="combustible">⛽ Combustible / km</button></div>
       <div class="catpick" id="catpick"></div>
       <div class="field amtwrap"><label for="amount">Import</label><input id="amount" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0,00" required><span class="eur">€</span></div>
       <div class="grid2">
@@ -267,7 +271,10 @@
         <div class="field"><label for="date">Data</label><input id="date" type="date" required></div>
       </div>
       <div class="field"><label for="place" id="placeLbl">Restaurant o empresa</label><input id="place" type="text" autocomplete="off" placeholder="Nom del comerç"></div>
-      <div class="field" id="fuelWrap" style="display:none"><label for="litres">Litres</label><input id="litres" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0"></div>
+      <div class="grid2" id="fuelWrap" style="display:none">
+        <div class="field"><label for="litres">Litres (gasoil)</label><input id="litres" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0"></div>
+        <div class="field"><label for="fuelKm">Km del comptador</label><input id="fuelKm" type="number" inputmode="numeric" step="1" min="0" placeholder="opcional"></div>
+      </div>
       <div class="field" id="compWrap" style="display:none">
         <label for="compCount">Acompanyants (nombre de persones)</label>
         <input id="compCount" type="number" min="0" max="30" step="1" inputmode="numeric" value="0">

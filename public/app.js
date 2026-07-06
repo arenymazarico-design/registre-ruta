@@ -10,7 +10,7 @@
   };
   var CAT_KEYS = Object.keys(CATS);
   var EXPENSE_KEYS = CAT_KEYS.filter(function (k) { return k !== "combustible"; });
-  var APP_VERSION = "2025-07-03 · vehicle-habitual";
+  var APP_VERSION = "2025-07-03 · plantilles-cif";
 
   // ---------- Idioma (català per defecte / castellà) ----------
   var lang = localStorage.getItem("lang") || "ca";
@@ -73,7 +73,7 @@
     "Escriu el teu nom": "Escribe tu nombre", "El PIN nou ha de tenir 4 dígits": "El PIN nuevo debe tener 4 dígitos",
     "El PIN ha de tenir 4 dígits": "El PIN debe tener 4 dígitos", "Escriu el nom": "Escribe el nombre",
     "Posa un import vàlid": "Pon un importe válido",
-    "Litres": "Litros", "Km del comptador": "Km del cuentakilómetros", "Nom de la gasolinera": "Nombre de la gasolinera",
+    "Litres": "Litros", "Litres (gasoil)": "Litros (gasoil)", "Km del comptador": "Km del cuentakilómetros", "Nom de la gasolinera": "Nombre de la gasolinera",
     "Consulta de km": "Consulta de km", "Informe de km i combustible": "Informe de km y combustible",
     "Agrupar i sumar per usuari": "Agrupar y sumar por usuario", "Imprimir": "Imprimir",
     "Total general": "Total general", "Distància (km)": "Distancia (km)", "Consum (L/100km)": "Consumo (L/100km)",
@@ -94,6 +94,7 @@
     "Mentre estigui actiu, tot el que entris s'assignarà a aquesta matrícula.": "Mientras esté activo, todo lo que introduzcas se asignará a esta matrícula.",
     "Cap vehicle actiu": "Sin vehículo activo", "Toca una matrícula per activar-la. 🏠 = habitual.": "Toca una matrícula para activarla. 🏠 = habitual.",
     "Vehicle habitual": "Vehículo habitual",
+    "Despesa": "Gasto", "Té vehicle d'empresa": "Tiene vehículo de empresa", "⬇︎ Descarregar plantilla": "⬇︎ Descargar plantilla",
     "Posa la matrícula": "Pon la matrícula", "Totes les matrícules": "Todas las matrículas", "(sense matrícula)": "(sin matrícula)", "Matrícula": "Matrícula"
   };
   var translating = false;
@@ -291,7 +292,8 @@
       userSel = '<select id="userFilter" class="chip" style="appearance:auto"><option value="tots"' + (userFilter === "tots" ? " selected" : "") + '>Tots els usuaris</option>' +
         roster.map(function (u) { return '<option value="' + u.id + '"' + (userFilter === u.id ? " selected" : "") + '>' + esc(u.name) + '</option>'; }).join("") + '</select>';
     }
-    return '<div class="toolbar">' + chips + '<span class="spacer"></span>' + userSel + '<button class="expbtn" id="openKmBtn">⛽ km</button><button class="expbtn" id="openExp">Consulta</button></div>';
+    var kmBtn = (admin || myHasVehicle()) ? '<button class="expbtn" id="openKmBtn">⛽ km</button>' : '';
+    return '<div class="toolbar">' + chips + '<span class="spacer"></span>' + userSel + kmBtn + '<button class="expbtn" id="openExp">Consulta</button></div>';
   }
 
   function renderList(mes) {
@@ -328,7 +330,7 @@
     var mb = el("manualBtn"); if (mb) mb.onclick = function () { pendingPhoto = null; openSheetNew(null, false); };
     el("avatarBtn").onclick = openMenu;
     el("openExp").onclick = openExport;
-    el("openKmBtn").onclick = openKm;
+    var kb = el("openKmBtn"); if (kb) kb.onclick = openKm;
     el("root").querySelectorAll(".fc").forEach(function (c) { c.onclick = function () { filter = c.getAttribute("data-k"); render(); }; });
     var uf = el("userFilter"); if (uf) uf.onchange = function () { userFilter = uf.value; render(); };
   }
@@ -340,7 +342,7 @@
     if (admin) items += '<button class="mi" id="miConfig">Configuració</button>';
     items += '<button class="mi" id="miPin">Canviar contrasenya</button>';
     items += '<button class="mi" id="miKm">Combustible i km</button>';
-    items += '<button class="mi" id="miVeh">Els meus vehicles</button>';
+    if (myHasVehicle()) items += '<button class="mi" id="miVeh">Els meus vehicles</button>';
     items += '<button class="mi danger" id="miLogout">Tancar sessió</button>';
     items += '<div style="display:flex;gap:8px;justify-content:center;padding:12px">' +
       '<button type="button" class="langbtn" data-l="ca"' + (lang === "ca" ? ' data-active="true"' : '') + '>Català</button>' +
@@ -352,7 +354,7 @@
     if (admin) el("miConfig").onclick = function () { closeMenu(); openCfg(); };
     el("miPin").onclick = function () { closeMenu(); openPin(); };
     el("miKm").onclick = function () { closeMenu(); openKm(); };
-    el("miVeh").onclick = function () { closeMenu(); openVehicles(null); };
+    var mv = el("miVeh"); if (mv) mv.onclick = function () { closeMenu(); openVehicles(null); };
     el("miLogout").onclick = function () { closeMenu(); clearSession(); me = null; render(); };
     el("menuCard").querySelectorAll(".langbtn").forEach(function (b) { b.onclick = function () { setLang(b.getAttribute("data-l")); }; });
   }
@@ -387,10 +389,12 @@
       '<button class="btn-primary" id="umAdd" style="width:100%;margin-bottom:10px">+ Nou usuari</button>' +
       '<label class="btn-ghost" for="umXls" style="display:block;text-align:center;cursor:pointer">📄 Importar usuaris d\'Excel</label>' +
       '<input id="umXls" type="file" accept=".xlsx,.xls,.csv" style="display:none">' +
-      '<p style="font-size:12px;color:var(--muted);margin-top:8px">Excel amb columnes: <b>Nom</b>, <b>PIN</b> (4 dígits) i, opcionalment, <b>Rol</b> (usuari/admin). La primera fila pot ser de títols.</p>';
+      '<button class="btn-ghost" id="umTpl" style="width:100%;margin-top:8px">⬇︎ Descarregar plantilla</button>' +
+      '<p style="font-size:12px;color:var(--muted);margin-top:8px">Columnes: <b>Nom</b>, <b>PIN</b> (4 dígits), <b>Rol</b> (usuari/admin) i <b>Vehicles</b> (matrícules separades per espai o coma). La primera fila pot ser de títols.</p>';
     el("umBody").querySelectorAll(".umrow").forEach(function (r) { r.onclick = function () { renderUMEdit(r.getAttribute("data-id")); }; });
     el("umAdd").onclick = function () { renderUMEdit(null); };
     el("umXls").onchange = function (ev) { var f = ev.target.files && ev.target.files[0]; if (f) importUsers(f); ev.target.value = ""; };
+    el("umTpl").onclick = function () { downloadTemplate("plantilla-usuaris.xlsx", [["Nom", "PIN", "Rol", "Vehicles"], ["Joan Exemple", "1234", "usuari", "1234ABC 5678DEF"], ["Anna Admin", "4321", "admin", "9876GHI"]]); };
   }
 
   function importUsers(file) {
@@ -401,10 +405,11 @@
         var name = (r[0] == null ? "" : String(r[0])).trim();
         var pin = (r[1] == null ? "" : String(r[1])).trim();
         var role = (r[2] == null ? "" : String(r[2])).trim().toLowerCase();
-        // salta la fila de títols si sembla capçalera
+        var vehStr = (r[3] == null ? "" : String(r[3])).trim();
         if (i === 0 && /nom|name/i.test(name) && !/^\d{4}$/.test(pin)) return;
         if (!name) return;
-        bulk.push({ name: name, pin: pin, role: (role === "admin" || role === "administrador") ? "admin" : "user" });
+        var vehicles = vehStr ? vehStr.split(/[\s,;]+/).map(function (x) { return x.trim().toUpperCase(); }).filter(Boolean) : [];
+        bulk.push({ name: name, pin: pin, role: (role === "admin" || role === "administrador") ? "admin" : "user", vehicles: vehicles });
       });
       if (!bulk.length) { toast("Cap fila vàlida a l'Excel"); return; }
       try {
@@ -425,6 +430,7 @@
       '<div class="roles"><label><input type="radio" name="urole" value="user"' + (role === "user" ? " checked" : "") + '><div class="opt">Usuari</div></label>' +
       '<label><input type="radio" name="urole" value="admin"' + (role === "admin" ? " checked" : "") + '><div class="opt">Administrador</div></label></div>' +
       '<div class="field"><label for="uPin">PIN (4 dígits)</label><input id="uPin" type="tel" inputmode="numeric" maxlength="4" value="' + (u && u.pin ? esc(u.pin) : "") + '" placeholder="' + (u ? "Deixa-ho buit per no canviar-lo" : "••••") + '"></div>' +
+      '<label style="display:flex;align-items:center;gap:9px;font-size:15px;font-weight:600;margin:2px 0 14px;cursor:pointer"><input type="checkbox" id="uVehHas"' + ((!u || u.hasVehicle !== false) ? " checked" : "") + ' style="width:20px;height:20px"> Té vehicle d\'empresa</label>' +
       '<div class="actions"><button type="button" class="btn-ghost" id="uBack" style="flex:0 0 auto;width:auto;padding:14px 18px">‹ Enrere</button><button type="button" class="btn-primary" id="uSave">Desa</button></div>' +
       (u ? '<button type="button" class="btn-ghost" id="uVeh" style="width:100%;margin-top:10px">Vehicles de l\'usuari</button>' : '') +
       (u ? '<button type="button" class="btn-danger" id="uDel" style="width:100%;margin-top:10px">Eliminar usuari</button>' : '');
@@ -438,7 +444,7 @@
       if (!u && !/^\d{4}$/.test(pn)) { toast("El PIN ha de tenir 4 dígits"); return; }
       if (u && pn && !/^\d{4}$/.test(pn)) { toast("El PIN ha de tenir 4 dígits"); return; }
       try {
-        var payload = { name: nm, role: rl };
+        var payload = { name: nm, role: rl, hasVehicle: el("uVehHas").checked };
         if (u) payload.id = u.id;
         if (pn) payload.pin = pn;
         await api("/api/users", "POST", payload);
@@ -491,6 +497,7 @@
       '<textarea id="cNames" placeholder="Un nom per línia" style="width:100%;min-height:90px;border:1.5px solid var(--line);border-radius:11px;padding:12px;font-size:15px;font-family:var(--sans)">' + esc(cfg.names.join("\n")) + '</textarea>' +
       '<label class="btn-ghost" for="cNamesXls" style="display:block;text-align:center;cursor:pointer;margin:8px 0 4px">📄 Importar noms d\'Excel</label>' +
       '<input id="cNamesXls" type="file" accept=".xlsx,.xls,.csv" style="display:none">' +
+      '<button type="button" class="btn-ghost" id="cNamesTpl" style="width:100%;margin:4px 0">⬇︎ Descarregar plantilla</button>' +
       '<p style="font-size:12px;color:var(--muted);margin:4px 0 14px">Excel amb una columna de noms (la primera). S\'afegiran als que ja hi ha.</p>' +
       '<button type="button" class="btn-primary" id="cSave" style="width:100%;margin-top:2px">Desa la configuració</button>';
     el("cfgBody").querySelectorAll(".swatch").forEach(function (s) {
@@ -517,6 +524,7 @@
         toast("Afegits " + got.length + " noms");
       });
     };
+    el("cNamesTpl").onclick = function () { downloadTemplate("plantilla-noms.xlsx", [["Nom"], ["Joan Exemple"], ["Maria Exemple"]]); };
     el("cSave").onclick = saveCfg;
   }
   function compressLogo(file, cb) {
@@ -543,6 +551,11 @@
       pendingPhoto = dataUrl; runExtraction(dataUrl);
     });
   });
+  function downloadTemplate(filename, aoa) {
+    if (typeof XLSX === "undefined") { toast("No s'ha pogut generar la plantilla"); return; }
+    var ws = XLSX.utils.aoa_to_sheet(aoa); var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Plantilla"); XLSX.writeFile(wb, filename);
+  }
   function readSheet(file, cb) {
     var reader = new FileReader();
     reader.onload = function () {
@@ -578,6 +591,14 @@
     el("catpick").innerHTML = EXPENSE_KEYS.map(function (k) { return '<label style="color:' + CATS[k].color + '"><input type="radio" name="cat" value="' + k + '"' + (selectedCat === k ? " checked" : "") + '><div class="opt"><span class="sq" style="background:' + CATS[k].color + '"></span>' + CATS[k].label + '</div></label>'; }).join("");
     document.querySelectorAll('input[name=cat]').forEach(function (r) { r.onchange = function () { selectedCat = r.value; toggleCompanions(); }; });
   }
+  function setEntryMode(mode) {
+    el("modeToggle").querySelectorAll(".mbtn").forEach(function (b) { b.setAttribute("data-active", b.getAttribute("data-m") === mode); });
+    if (mode === "combustible") selectedCat = "combustible";
+    else if (selectedCat === "combustible") selectedCat = "dietes";
+    renderCatPick();
+    el("catpick").style.display = (mode === "combustible") ? "none" : "grid";
+    toggleCompanions();
+  }
   function toggleCompanions() {
     el("compWrap").style.display = (selectedCat === "dietes") ? "block" : "none";
     var fuel = (selectedCat === "combustible");
@@ -609,13 +630,15 @@
     var isFuel = pendingFuel || (parsed && parsed.category === "combustible");
     el("sheetTitle").textContent = isFuel ? "Repostatge" : "Revisar tiquet"; el("aiHint").style.display = fromAI ? "flex" : "none";
     selectedCat = isFuel ? "combustible" : ((parsed && CATS[parsed.category] && parsed.category !== "combustible") ? parsed.category : "dietes");
-    renderCatPick(); el("catpick").style.display = isFuel ? "none" : "grid"; toggleCompanions();
+    setEntryMode(isFuel ? "combustible" : "despesa");
     el("amount").value = (parsed && parsed.amount != null) ? parsed.amount : "";
-    var cifVal = (parsed && parsed.cif) ? parsed.cif : "";
-    el("ticket").value = parsed ? ((parsed.invoice_number || parsed.ticket_number) || "") : "";
-    el("cif").value = cifVal; setNumberMode(!!cifVal);
+    var norm = function (s) { return String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, ""); };
+    var companyCif = cfg.cif || "";
+    var isFactura = !!(parsed && companyCif && (parsed.is_invoice === true || (parsed.cif && norm(parsed.cif) === norm(companyCif))));
+    el("ticket").value = parsed ? (isFactura ? (parsed.invoice_number || parsed.ticket_number || "") : (parsed.ticket_number || parsed.invoice_number || "")) : "";
+    el("cif").value = isFactura ? companyCif : ""; setNumberMode(isFactura);
     el("place").value = (parsed && parsed.business_name) ? parsed.business_name : "";
-    el("litres").value = (parsed && parsed.litres != null) ? parsed.litres : "";
+    el("litres").value = (parsed && parsed.litres != null) ? parsed.litres : ""; el("fuelKm").value = "";
     el("date").value = (parsed && parsed.date && /^\d{4}-\d{2}-\d{2}$/.test(parsed.date)) ? parsed.date : todayStr();
     el("compCount").value = 0; el("compList").innerHTML = ""; el("notes").value = ""; setThumb(pendingPhoto);
     el("acctRow").innerHTML = ""; setLock(false); openSheet_();
@@ -624,10 +647,10 @@
   function openSheet(id) {
     var e = entries.filter(function (x) { return x.id === id; })[0]; if (!e) return;
     el("entryForm").reset(); el("aiHint").style.display = "none"; el("sheetTitle").textContent = "Editar registre";
-    el("editId").value = e.id; selectedCat = e.cat; renderCatPick(); el("catpick").style.display = (e.cat === "combustible") ? "none" : "grid"; toggleCompanions();
+    el("editId").value = e.id; selectedCat = e.cat; setEntryMode(e.cat === "combustible" ? "combustible" : "despesa");
     el("amount").value = e.amount; el("ticket").value = e.ticket || ""; el("place").value = e.place || "";
     el("cif").value = e.cif || ""; setNumberMode(!!e.cif);
-    el("litres").value = (e.litres != null) ? e.litres : "";
+    el("litres").value = (e.litres != null) ? e.litres : ""; el("fuelKm").value = "";
     el("date").value = e.date; setCompanionsFromString(e.companions || ""); el("notes").value = e.notes || "";
     pendingPhoto = e.photo || null; setThumb(pendingPhoto);
     el("delBtn").style.display = (admin || e.userId === me.id) ? "block" : "none";
@@ -635,9 +658,10 @@
   }
 
   function setLock(locked) {
-    ["amount", "ticket", "date", "place", "compCount", "notes", "litres"].forEach(function (id) { el(id).disabled = locked; });
+    ["amount", "ticket", "date", "place", "compCount", "notes", "litres", "fuelKm"].forEach(function (id) { el(id).disabled = locked; });
     el("compList").querySelectorAll(".compName").forEach(function (i) { i.disabled = locked; });
     document.querySelectorAll('input[name=cat]').forEach(function (r) { r.disabled = locked; });
+    el("modeToggle").querySelectorAll(".mbtn").forEach(function (b) { b.disabled = locked; });
     el("retakeBtn").style.display = locked ? "none" : "";
     el("saveBtn").style.display = locked ? "none" : "";
     if (locked) el("delBtn").style.display = "none";
@@ -668,6 +692,7 @@
   el("closeSheet").onclick = closeSheet; el("scrim").onclick = closeSheet;
   el("retakeBtn").onclick = function () { retakeMode = true; el("photo").value = ""; el("photo").click(); };
   el("compCount").addEventListener("input", function () { renderCompRows(parseInt(el("compCount").value, 10) || 0, readCompValues()); });
+  el("modeToggle").querySelectorAll(".mbtn").forEach(function (b) { b.onclick = function () { setEntryMode(b.getAttribute("data-m")); }; });
   el("thumbImg").onclick = function () { if (pendingPhoto) openImg(pendingPhoto); };
 
   el("entryForm").addEventListener("submit", async function (ev) {
@@ -695,6 +720,10 @@
       if (id) { payload.id = id; res = await api("/api/tickets", "PUT", payload); }
       else res = await api("/api/tickets", "POST", payload);
       await loadEntries();
+      if (selectedCat === "combustible") {
+        var fkm = el("fuelKm").value;
+        if (fkm !== "" && !isNaN(Number(fkm))) { try { await api("/api/readings", "POST", { km: Number(fkm), date: payload.date }); await loadReadings(); } catch (e) { } }
+      }
       pendingPhoto = null; closeSheet(); render(); if (el("kmSheet").getAttribute("data-open")==="true") renderKm();
       var okMsg;
       if (id) okMsg = "Registre actualitzat";
@@ -1030,6 +1059,7 @@
 
   // ---------- Lectura mensual de km + recordatori ----------
   function myActivePlate() { var u = roster.filter(function (x) { return x.id === me.id; })[0]; return (u && u.activePlate) ? u.activePlate : ""; }
+  function myHasVehicle() { var u = roster.filter(function (x) { return x.id === me.id; })[0]; return !u || u.hasVehicle !== false; }
   function openRead() {
     var today = todayStr(); el("readDate").value = today;
     var ym = today.slice(0, 7), ap = myActivePlate();
@@ -1046,7 +1076,7 @@
     catch (e) { toast(e.message, { error: true }); }
   };
   function hasReadingThisMonth() { var ym = todayStr().slice(0, 7), ap = myActivePlate(); return readings.some(function (r) { return r.userId === me.id && r.ym === ym && (r.plate || "") === ap; }); }
-  function showKmReminder() { if (me && !hasReadingThisMonth()) el("kmReminder").setAttribute("data-show", "true"); }
+  function showKmReminder() { if (me && myHasVehicle() && !hasReadingThisMonth()) el("kmReminder").setAttribute("data-show", "true"); }
   function hideKmReminder() { el("kmReminder").removeAttribute("data-show"); }
   el("kmReminderGo").onclick = function () { hideKmReminder(); openRead(); };
   el("kmReminderX").onclick = function () { hideKmReminder(); };

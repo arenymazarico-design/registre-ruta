@@ -21,11 +21,11 @@ export default async (req) => {
       if (!me) return json({ count });
       function veh(v) { try { return v ? JSON.parse(v) : []; } catch (e) { return []; } }
       if (me.role === 'admin') {
-        const rows = await sql`select id, name, role, pin_plain, vehicles, active_plate, main_plate from users order by name asc`;
-        return json({ users: rows.map((u) => ({ id: u.id, name: u.name, role: u.role, pin: u.pin_plain || '', vehicles: veh(u.vehicles), activePlate: u.active_plate || '', mainPlate: u.main_plate || '' })) });
+        const rows = await sql`select id, name, role, pin_plain, vehicles, active_plate, main_plate, has_vehicle from users order by name asc`;
+        return json({ users: rows.map((u) => ({ id: u.id, name: u.name, role: u.role, pin: u.pin_plain || '', vehicles: veh(u.vehicles), activePlate: u.active_plate || '', mainPlate: u.main_plate || '', hasVehicle: u.has_vehicle !== false })) });
       }
-      const rows = await sql`select id, name, role, vehicles, active_plate, main_plate from users order by name asc`;
-      return json({ users: rows.map((u) => ({ id: u.id, name: u.name, role: u.role, vehicles: veh(u.vehicles), activePlate: u.active_plate || '', mainPlate: u.main_plate || '' })) });
+      const rows = await sql`select id, name, role, vehicles, active_plate, main_plate, has_vehicle from users order by name asc`;
+      return json({ users: rows.map((u) => ({ id: u.id, name: u.name, role: u.role, vehicles: veh(u.vehicles), activePlate: u.active_plate || '', mainPlate: u.main_plate || '', hasVehicle: u.has_vehicle !== false })) });
     }
 
     if (req.method === 'POST') {
@@ -86,7 +86,11 @@ export default async (req) => {
           if (!name || !/^\d{4}$/.test(pin)) { skipped++; continue; }
           const exists = (await sql`select 1 from users where lower(name)=lower(${name})`)[0];
           if (exists) { skipped++; continue; }
-          await makeUser(name, role, pin);
+          const nid = await makeUser(name, role, pin);
+          if (Array.isArray(row.vehicles) && row.vehicles.length) {
+            const clean = row.vehicles.map(function (x) { return String(x).trim().toUpperCase(); }).filter(Boolean);
+            if (clean.length) await sql`update users set vehicles=${JSON.stringify(clean)}, main_plate=${clean[0]} where id=${nid}`;
+          }
           created++;
         }
         return json({ ok: true, created, skipped });
@@ -113,10 +117,12 @@ export default async (req) => {
           await sql`update users set name=${b.name}, role=${finalRole} where id=${b.id}`;
         }
         await sql`update tickets set user_name=${b.name} where user_id=${b.id}`;
+        if (b.hasVehicle !== undefined) await sql`update users set has_vehicle=${b.hasVehicle !== false} where id=${b.id}`;
         return json({ ok: true, id: b.id });
       } else {
         if (!/^\d{4}$/.test(String(b.pin || ''))) return json({ error: 'El PIN ha de tenir 4 dígits' }, 400);
         const nid = await makeUser(b.name, finalRole, b.pin);
+        if (b.hasVehicle !== undefined) await sql`update users set has_vehicle=${b.hasVehicle !== false} where id=${nid}`;
         return json({ ok: true, id: nid });
       }
     }

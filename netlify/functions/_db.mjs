@@ -20,6 +20,7 @@ export async function ensure() {
   await sql`alter table users add column if not exists vehicles text default ''`;
   await sql`alter table users add column if not exists active_plate text default ''`;
   await sql`alter table users add column if not exists main_plate text default ''`;
+  await sql`alter table users add column if not exists has_vehicle boolean default true`;
   await sql`create table if not exists tickets (
     id text primary key,
     user_id text,
