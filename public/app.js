@@ -10,7 +10,7 @@
   };
   var CAT_KEYS = Object.keys(CATS);
   var EXPENSE_KEYS = CAT_KEYS.filter(function (k) { return k !== "combustible"; });
-  var APP_VERSION = "2025-07-03 · peruser-matricula";
+  var APP_VERSION = "2025-07-03 · full-per-usuari";
 
   // ---------- Idioma (català per defecte / castellà) ----------
   var lang = localStorage.getItem("lang") || "ca";
@@ -1123,6 +1123,33 @@
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(usr), "Per usuari");
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(lects), "Lectures km");
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(det), "Repostatges");
+
+    // Una pestanya per usuari (amb el seu nom) i fila de totals.
+    var usedNames = { "resum mensual": 1, "per usuari": 1, "lectures km": 1, "repostatges": 1 };
+    function safeSheetName(name) {
+      var s = String(name || "Usuari").replace(/[\\\/\?\*\[\]:]/g, " ").trim().slice(0, 28) || "Usuari";
+      var base = s, n = 2;
+      while (usedNames[s.toLowerCase()]) { s = base.slice(0, 25) + " " + n; n++; }
+      usedNames[s.toLowerCase()] = 1; return s;
+    }
+    scope.forEach(function (uid) {
+      var userFuel = fuelInRange([uid], b.from, b.to);
+      var plates = km.plate ? [km.plate] : platesForUser(uid).slice();
+      var fp = {}; userFuel.forEach(function (e) { fp[e.plate || ""] = 1; });
+      Object.keys(fp).forEach(function (p) { if (plates.indexOf(p) < 0) plates.push(p); });
+      var aoa = [["Matrícula", "Km", "Litres", "Consum (L/100km)", "Cost (€)"]];
+      var tD = 0, tL = 0, tC = 0;
+      plates.sort().forEach(function (p) {
+        var list = userFuel.filter(function (e) { return (e.plate || "") === p; });
+        var d = distanceForUserPlate(uid, p, b.from, addDay(b.to, 1));
+        var lit = litresSum(list), cost = costSum(list);
+        if (d > 0 || lit > 0) { aoa.push([p || "", Number(d.toFixed(0)), Number(lit.toFixed(2)), Number((d > 0 ? lit / d * 100 : 0).toFixed(2)), Number(cost.toFixed(2))]); tD += d; tL += lit; tC += cost; }
+      });
+      if (aoa.length > 1) {
+        aoa.push(["TOTAL", Number(tD.toFixed(0)), Number(tL.toFixed(2)), Number((tD > 0 ? tL / tD * 100 : 0).toFixed(2)), Number(tC.toFixed(2))]);
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), safeSheetName(userName(uid)));
+      }
+    });
     XLSX.writeFile(wb, "km-combustible.xlsx");
     toast("Excel generat");
   }
