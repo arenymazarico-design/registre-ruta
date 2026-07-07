@@ -10,7 +10,7 @@
   };
   var CAT_KEYS = Object.keys(CATS);
   var EXPENSE_KEYS = CAT_KEYS.filter(function (k) { return k !== "combustible"; });
-  var APP_VERSION = "2025-07-03 · excel-logo";
+  var APP_VERSION = "2025-07-03 · excel-logo3";
 
   // ---------- Idioma (català per defecte / castellà) ----------
   var lang = localStorage.getItem("lang") || "ca";
@@ -847,6 +847,15 @@
   function rowAllExp(e) { var f = e.cif ? (e.ticket || "") : "", t = e.cif ? "" : (e.ticket || ""); return [e.date, e.user, f, t, (CATS[e.cat] ? CATS[e.cat].label : e.cat), e.place || "", Number(e.amount), e.companions || "", e.notes || ""]; }
   function rowUserExp(e) { var f = e.cif ? (e.ticket || "") : "", t = e.cif ? "" : (e.ticket || ""); return [e.date, f, t, (CATS[e.cat] ? CATS[e.cat].label : e.cat), e.place || "", Number(e.amount), e.companions || "", e.notes || ""]; }
   function dlBlob(blob, filename) { var a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = filename; document.body.appendChild(a); a.click(); a.remove(); }
+  function loadImageSize(dataUrl) {
+    return new Promise(function (res) {
+      if (!dataUrl) { res(null); return; }
+      var img = new Image();
+      img.onload = function () { res({ w: img.naturalWidth || img.width, h: img.naturalHeight || img.height }); };
+      img.onerror = function () { res(null); };
+      img.src = dataUrl;
+    });
+  }
   function safeSheet(name, used) {
     var s = String(name || "Usuari").replace(/[\\\/\?\*\[\]:]/g, " ").trim().slice(0, 28) || "Usuari";
     var base = s, n = 2; while (used[s.toLowerCase()]) { s = base.slice(0, 25) + " " + n; n++; } used[s.toLowerCase()] = 1; return s;
@@ -859,17 +868,27 @@
     if (cfg.logo && cfg.logo.indexOf("data:") === 0) {
       try { var ext = (cfg.logo.substring(5, cfg.logo.indexOf(";")) || "image/png").split("/")[1] || "png"; logoId = wb.addImage({ base64: cfg.logo, extension: ext }); } catch (e) { logoId = null; }
     }
+    // Mida del logo: manté la proporció original i el fa gran (aprox. x2).
+    var logoSize = await loadImageSize(cfg.logo);
+    var logoExt = { width: 150, height: 90 };
+    if (logoSize && logoSize.w && logoSize.h) {
+      var aspect = logoSize.w / logoSize.h;
+      var h = Math.min(logoSize.h * 2, 180), w = h * aspect;
+      var maxW = 300; if (w > maxW) { w = maxW; h = w / aspect; }
+      logoExt = { width: Math.round(w), height: Math.round(h) };
+    }
+    var logoRows = Math.max(3, Math.ceil((logoExt.height + 10) / 20));
     var thin = { style: "thin", color: { argb: "FFDDDDDD" } };
     var borderAll = { top: thin, bottom: thin, left: thin, right: thin };
     function styledSheet(name, header, widths, rows, importCol, title, withLogo) {
       var ws = wb.addWorksheet(name);
       ws.columns = widths.map(function (w) { return { width: w }; });
-      var hr = (withLogo || title) ? 4 : 1;
+      var hr = (withLogo || title) ? (logoRows + 1) : 1;
       if (withLogo || title) {
-        ws.getRow(1).height = 27; ws.getRow(2).height = 27; ws.getRow(3).height = 27;
-        ws.mergeCells(1, 1, 3, header.length);
-        var tc = ws.getCell(1, 1); tc.value = title || name; tc.font = { bold: true, size: 15 }; tc.alignment = { vertical: "middle", horizontal: "center" };
-        if (withLogo && logoId != null) { try { ws.addImage(logoId, { tl: { col: 0, row: 0 }, ext: { width: 80, height: 80 } }); } catch (e) { } }
+        for (var rr = 1; rr <= logoRows; rr++) ws.getRow(rr).height = 20;
+        ws.mergeCells(1, 1, logoRows, header.length);
+        var tc = ws.getCell(1, 1); tc.value = title || name; tc.font = { bold: true, size: 16 }; tc.alignment = { vertical: "middle", horizontal: "center" };
+        if (withLogo && logoId != null) { try { ws.addImage(logoId, { tl: { col: 0, row: 0 }, ext: { width: logoExt.width, height: logoExt.height } }); } catch (e) { } }
       }
       var headRow = ws.getRow(hr);
       header.forEach(function (h, i) { var c = headRow.getCell(i + 1); c.value = h; c.font = { bold: true, color: { argb: "FFFFFFFF" } }; c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: headerARGB } }; c.alignment = { vertical: "middle", horizontal: "center", wrapText: true }; c.border = borderAll; });
