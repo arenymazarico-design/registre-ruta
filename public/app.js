@@ -10,7 +10,7 @@
   };
   var CAT_KEYS = Object.keys(CATS);
   var EXPENSE_KEYS = CAT_KEYS.filter(function (k) { return k !== "combustible"; });
-  var APP_VERSION = "2025-07-03 · columnes-amples";
+  var APP_VERSION = "2025-07-03 · titol-2linies";
 
   // ---------- Idioma (català per defecte / castellà) ----------
   var lang = localStorage.getItem("lang") || "ca";
@@ -879,12 +879,21 @@
     return { wb: wb, logoId: logoId, logoExt: logoExt, logoRows: Math.max(2, Math.ceil(logoExt.height / 20)), headerARGB: headerARGB, thin: thin, borderAll: { top: thin, bottom: thin, left: thin, right: thin } };
   }
   function xlsxTop(ws, ctx, header, title, withLogo) {
-    var hr = (withLogo || title) ? (ctx.logoRows + 1) : 1;
-    if (withLogo || title) {
+    var hr = 1;
+    if (withLogo && ctx.logoId != null) {
       for (var rr = 1; rr <= ctx.logoRows; rr++) ws.getRow(rr).height = 20;
-      ws.mergeCells(1, 1, ctx.logoRows, header.length);
-      var tc = ws.getCell(1, 1); tc.value = title || ""; tc.font = { bold: true, size: 28 }; tc.alignment = { vertical: "middle", horizontal: "center" };
-      if (withLogo && ctx.logoId != null) { try { ws.addImage(ctx.logoId, { tl: { col: 0, row: 0 }, ext: { width: ctx.logoExt.width, height: ctx.logoExt.height } }); } catch (e) { } }
+      try { ws.addImage(ctx.logoId, { tl: { col: 0, row: 0 }, ext: { width: ctx.logoExt.width, height: ctx.logoExt.height } }); } catch (e) { }
+      var startCol = 2, acc = 0;
+      for (var ci = 1; ci <= header.length; ci++) { acc += (ws.getColumn(ci).width || 10) * 7; if (acc >= ctx.logoExt.width + 12) { startCol = ci + 1; break; } }
+      if (startCol > header.length) startCol = header.length; if (startCol < 2) startCol = 2;
+      ws.mergeCells(1, startCol, ctx.logoRows, header.length);
+      var tc = ws.getCell(1, startCol); tc.value = title || ""; tc.font = { bold: true, size: 20 }; tc.alignment = { vertical: "middle", horizontal: "left", wrapText: true };
+      hr = ctx.logoRows + 1;
+    } else if (title) {
+      ws.getRow(1).height = 36;
+      ws.mergeCells(1, 1, 1, header.length);
+      var tc2 = ws.getCell(1, 1); tc2.value = title; tc2.font = { bold: true, size: 24 }; tc2.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
+      hr = 2;
     }
     var headRow = ws.getRow(hr);
     header.forEach(function (h, i) { var c = headRow.getCell(i + 1); c.value = h; c.font = { bold: true, color: { argb: "FFFFFFFF" } }; c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: ctx.headerARGB } }; c.alignment = { vertical: "middle", horizontal: "center", wrapText: true }; c.border = ctx.borderAll; });
@@ -946,7 +955,7 @@
     var used = { "consulta": 1 };
     order.forEach(function (uid) {
       var nm = byUser[uid][0].user || "Usuari";
-      xlsxFlatSheet(ctx, safeSheet(nm, used), headerU, [13, 18, 16, 15, 34, 13, 28, 40], byUser[uid].map(rowUserExp), 6, "Despeses · " + nm, true, true);
+      xlsxFlatSheet(ctx, safeSheet(nm, used), headerU, [13, 18, 16, 15, 34, 13, 28, 40], byUser[uid].map(rowUserExp), 6, "Despeses\n" + nm, true, true);
     });
     var buf = await ctx.wb.xlsx.writeBuffer();
     dlBlob(new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), "consulta.xlsx");
@@ -1258,7 +1267,7 @@
         var d = distanceForUserPlate(uid, p, b.from, addDay(b.to, 1)), lit = litresSum(list), cost = costSum(list);
         if (list.length || d > 0) groups.push({ label: p, km: d, litres: lit, cost: cost, rows: list.map(function (e) { return [e.date, e.place || "", e.litres != null ? Number(e.litres) : "", Number(e.amount)]; }) });
       });
-      if (groups.length) xlsxKmUserSheet(ctx, safeSheet(userName(uid), used), userName(uid) + " · Combustible", groups);
+      if (groups.length) xlsxKmUserSheet(ctx, safeSheet(userName(uid), used), "Combustible\n" + userName(uid), groups);
     });
 
     var buf = await ctx.wb.xlsx.writeBuffer();
