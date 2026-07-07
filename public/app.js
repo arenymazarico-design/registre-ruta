@@ -10,7 +10,7 @@
   };
   var CAT_KEYS = Object.keys(CATS);
   var EXPENSE_KEYS = CAT_KEYS.filter(function (k) { return k !== "combustible"; });
-  var APP_VERSION = "2025-07-03 · consulta-fulls";
+  var APP_VERSION = "2025-07-03 · excel-logo";
 
   // ---------- Idioma (català per defecte / castellà) ----------
   var lang = localStorage.getItem("lang") || "ca";
@@ -864,12 +864,12 @@
     function styledSheet(name, header, widths, rows, importCol, title, withLogo) {
       var ws = wb.addWorksheet(name);
       ws.columns = widths.map(function (w) { return { width: w }; });
-      var hr = (withLogo || title) ? 3 : 1;
+      var hr = (withLogo || title) ? 4 : 1;
       if (withLogo || title) {
-        ws.mergeCells(1, 2, 1, header.length);
-        var tc = ws.getCell(1, 2); tc.value = title || name; tc.font = { bold: true, size: 14 }; tc.alignment = { vertical: "middle" };
-        ws.getRow(1).height = 40;
-        if (withLogo && logoId != null) { try { ws.addImage(logoId, { tl: { col: 0, row: 0 }, ext: { width: 120, height: 40 } }); } catch (e) { } }
+        ws.getRow(1).height = 27; ws.getRow(2).height = 27; ws.getRow(3).height = 27;
+        ws.mergeCells(1, 1, 3, header.length);
+        var tc = ws.getCell(1, 1); tc.value = title || name; tc.font = { bold: true, size: 15 }; tc.alignment = { vertical: "middle", horizontal: "center" };
+        if (withLogo && logoId != null) { try { ws.addImage(logoId, { tl: { col: 0, row: 0 }, ext: { width: 80, height: 80 } }); } catch (e) { } }
       }
       var headRow = ws.getRow(hr);
       header.forEach(function (h, i) { var c = headRow.getCell(i + 1); c.value = h; c.font = { bold: true, color: { argb: "FFFFFFFF" } }; c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: headerARGB } }; c.alignment = { vertical: "middle", horizontal: "center", wrapText: true }; c.border = borderAll; });
