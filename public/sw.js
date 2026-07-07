@@ -1,6 +1,6 @@
 // Service worker: sempre agafa l'última versió quan hi ha xarxa (network-first),
 // i fa servir la memòria cau només com a reserva quan no hi ha connexió.
-const CACHE = 'registre-cache-v24';
+const CACHE = 'registre-cache-v25';
 const CORE = ['/', '/index.html', '/app.js', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png'];
 
 self.addEventListener('install', (e) => {

@@ -10,7 +10,7 @@
   };
   var CAT_KEYS = Object.keys(CATS);
   var EXPENSE_KEYS = CAT_KEYS.filter(function (k) { return k !== "combustible"; });
-  var APP_VERSION = "2025-07-03 · full-per-usuari";
+  var APP_VERSION = "2025-07-03 · consulta-fulls";
 
   // ---------- Idioma (català per defecte / castellà) ----------
   var lang = localStorage.getItem("lang") || "ca";
@@ -844,23 +844,95 @@
     });
     return { header: header, rows: rows };
   }
+  function rowAllExp(e) { var f = e.cif ? (e.ticket || "") : "", t = e.cif ? "" : (e.ticket || ""); return [e.date, e.user, f, t, (CATS[e.cat] ? CATS[e.cat].label : e.cat), e.place || "", Number(e.amount), e.companions || "", e.notes || ""]; }
+  function rowUserExp(e) { var f = e.cif ? (e.ticket || "") : "", t = e.cif ? "" : (e.ticket || ""); return [e.date, f, t, (CATS[e.cat] ? CATS[e.cat].label : e.cat), e.place || "", Number(e.amount), e.companions || "", e.notes || ""]; }
+  function dlBlob(blob, filename) { var a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = filename; document.body.appendChild(a); a.click(); a.remove(); }
+  function safeSheet(name, used) {
+    var s = String(name || "Usuari").replace(/[\\\/\?\*\[\]:]/g, " ").trim().slice(0, 28) || "Usuari";
+    var base = s, n = 2; while (used[s.toLowerCase()]) { s = base.slice(0, 25) + " " + n; n++; } used[s.toLowerCase()] = 1; return s;
+  }
+
+  async function buildConsultaXlsx(list) {
+    var headerARGB = (cfg.color && /^#?[0-9a-fA-F]{6}$/.test(cfg.color)) ? "FF" + cfg.color.replace("#", "").toUpperCase() : "FF2E3338";
+    var wb = new ExcelJS.Workbook();
+    var logoId = null;
+    if (cfg.logo && cfg.logo.indexOf("data:") === 0) {
+      try { var ext = (cfg.logo.substring(5, cfg.logo.indexOf(";")) || "image/png").split("/")[1] || "png"; logoId = wb.addImage({ base64: cfg.logo, extension: ext }); } catch (e) { logoId = null; }
+    }
+    var thin = { style: "thin", color: { argb: "FFDDDDDD" } };
+    var borderAll = { top: thin, bottom: thin, left: thin, right: thin };
+    function styledSheet(name, header, widths, rows, importCol, title, withLogo) {
+      var ws = wb.addWorksheet(name);
+      ws.columns = widths.map(function (w) { return { width: w }; });
+      var hr = (withLogo || title) ? 3 : 1;
+      if (withLogo || title) {
+        ws.mergeCells(1, 2, 1, header.length);
+        var tc = ws.getCell(1, 2); tc.value = title || name; tc.font = { bold: true, size: 14 }; tc.alignment = { vertical: "middle" };
+        ws.getRow(1).height = 40;
+        if (withLogo && logoId != null) { try { ws.addImage(logoId, { tl: { col: 0, row: 0 }, ext: { width: 120, height: 40 } }); } catch (e) { } }
+      }
+      var headRow = ws.getRow(hr);
+      header.forEach(function (h, i) { var c = headRow.getCell(i + 1); c.value = h; c.font = { bold: true, color: { argb: "FFFFFFFF" } }; c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: headerARGB } }; c.alignment = { vertical: "middle", horizontal: "center", wrapText: true }; c.border = borderAll; });
+      headRow.height = 24;
+      rows.forEach(function (r, ri) {
+        var row = ws.getRow(hr + 1 + ri);
+        r.forEach(function (v, ci) { var c = row.getCell(ci + 1); c.value = v; c.border = borderAll; c.alignment = { vertical: "middle", wrapText: (ci + 1 === header.length) }; if (ci + 1 === importCol) { c.numFmt = '#,##0.00" €"'; c.alignment = { horizontal: "right" }; } });
+      });
+      var total = rows.reduce(function (s, r) { return s + (Number(r[importCol - 1]) || 0); }, 0);
+      var tr = ws.getRow(hr + 1 + rows.length);
+      for (var ci = 1; ci <= header.length; ci++) { var c = tr.getCell(ci); c.border = { top: { style: "medium" }, bottom: thin, left: thin, right: thin }; c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF0EEE7" } }; c.font = { bold: true }; }
+      tr.getCell(1).value = "TOTAL";
+      tr.getCell(importCol).value = total; tr.getCell(importCol).numFmt = '#,##0.00" €"'; tr.getCell(importCol).alignment = { horizontal: "right" };
+      ws.autoFilter = { from: { row: hr, column: 1 }, to: { row: hr, column: header.length } };
+      ws.views = [{ state: "frozen", ySplit: hr }];
+    }
+
+    var headerAll = ["Data", "Usuari", "Número de factura", "Número tiquet", "Tipus de gasto", "Restaurant/Proveïdor", "Import", "Acompanyants", "Observacions"];
+    styledSheet("Consulta", headerAll, [12, 20, 16, 14, 13, 26, 12, 22, 28], list.map(rowAllExp), 7, null, false);
+
+    var byUser = {}, order = [];
+    list.forEach(function (e) { if (!byUser[e.userId]) { byUser[e.userId] = []; order.push(e.userId); } byUser[e.userId].push(e); });
+    var headerU = ["Data", "Número de factura", "Número tiquet", "Tipus de gasto", "Restaurant/Proveïdor", "Import", "Acompanyants", "Observacions"];
+    var used = { "consulta": 1 };
+    order.forEach(function (uid) {
+      var nm = byUser[uid][0].user || "Usuari";
+      styledSheet(safeSheet(nm, used), headerU, [12, 16, 14, 13, 26, 12, 22, 28], byUser[uid].map(rowUserExp), 6, "Despeses · " + nm, true);
+    });
+
+    var buf = await wb.xlsx.writeBuffer();
+    dlBlob(new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), "consulta.xlsx");
+  }
+
+  function buildConsultaXlsxPlain(list) {
+    var wb = XLSX.utils.book_new();
+    var headerAll = ["Data", "Usuari", "Número de factura", "Número tiquet", "Tipus de gasto", "Restaurant/Proveïdor", "Import", "Acompanyants", "Observacions"];
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([headerAll].concat(list.map(rowAllExp))), "Consulta");
+    var byUser = {}, order = [];
+    list.forEach(function (e) { if (!byUser[e.userId]) { byUser[e.userId] = []; order.push(e.userId); } byUser[e.userId].push(e); });
+    var headerU = ["Data", "Número de factura", "Número tiquet", "Tipus de gasto", "Restaurant/Proveïdor", "Import", "Acompanyants", "Observacions"];
+    var used = { "consulta": 1 };
+    order.forEach(function (uid) {
+      var nm = byUser[uid][0].user || "Usuari";
+      var rows = byUser[uid].map(rowUserExp);
+      var total = rows.reduce(function (s, r) { return s + (Number(r[5]) || 0); }, 0);
+      var aoa = [headerU].concat(rows); aoa.push(["TOTAL", "", "", "", "", Number(total.toFixed(2)), "", ""]);
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), safeSheet(nm, used));
+    });
+    XLSX.writeFile(wb, "consulta.xlsx");
+  }
+
   async function exportXlsx() {
-    if (typeof XLSX === "undefined") { toast("No s'ha pogut carregar l'exportador"); return; }
     var list = computeConsulta();
     if (!list.length) { toast("No hi ha registres per exportar"); return; }
-    // Preguntem ABANS d'exportar (així funciona igual a PC i mòbil).
     var pend = admin ? list.filter(function (e) { return !e.accounted; }).map(function (e) { return e.id; }) : [];
     var doLock = false;
-    if (pend.length) {
-      doLock = confirm("S'exportaran " + list.length + " registres.\n\nVols marcar-los com a VALIDATS? Quedaran bloquejats i els usuaris ja no els podran modificar. (" + pend.length + " pendents)");
-    }
-    var d = consultaRows();
-    var ws = XLSX.utils.aoa_to_sheet([d.header].concat(d.rows));
-    ws["!cols"] = [{ wch: 11 }, { wch: 18 }, { wch: 16 }, { wch: 14 }, { wch: 12 }, { wch: 24 }, { wch: 10 }, { wch: 22 }, { wch: 26 }];
-    var wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Consulta");
-    XLSX.writeFile(wb, "consulta.xlsx");
-    toast("Excel generat");
+    if (pend.length) doLock = confirm("S'exportaran " + list.length + " registres.\n\nVols marcar-los com a VALIDATS? Quedaran bloquejats i els usuaris ja no els podran modificar. (" + pend.length + " pendents)");
+    try {
+      if (typeof ExcelJS !== "undefined") await buildConsultaXlsx(list);
+      else if (typeof XLSX !== "undefined") buildConsultaXlsxPlain(list);
+      else { toast("No s'ha pogut carregar l'exportador"); return; }
+      toast("Excel generat");
+    } catch (e) { toast("No s'ha pogut generar l'Excel", { error: true }); return; }
     if (doLock && pend.length) {
       try {
         await api("/api/tickets", "PUT", { validateIds: pend });
