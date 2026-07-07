@@ -10,7 +10,7 @@
   };
   var CAT_KEYS = Object.keys(CATS);
   var EXPENSE_KEYS = CAT_KEYS.filter(function (k) { return k !== "combustible"; });
-  var APP_VERSION = "2025-07-03 · excel-logo3";
+  var APP_VERSION = "2025-07-03 · excel-logo4";
 
   // ---------- Idioma (català per defecte / castellà) ----------
   var lang = localStorage.getItem("lang") || "ca";
@@ -868,16 +868,16 @@
     if (cfg.logo && cfg.logo.indexOf("data:") === 0) {
       try { var ext = (cfg.logo.substring(5, cfg.logo.indexOf(";")) || "image/png").split("/")[1] || "png"; logoId = wb.addImage({ base64: cfg.logo, extension: ext }); } catch (e) { logoId = null; }
     }
-    // Mida del logo: manté la proporció original i el fa gran (aprox. x2).
+    // Mida del logo: manté la proporció original, gran però a 2/3.
     var logoSize = await loadImageSize(cfg.logo);
-    var logoExt = { width: 150, height: 90 };
+    var logoExt = { width: 100, height: 60 };
     if (logoSize && logoSize.w && logoSize.h) {
       var aspect = logoSize.w / logoSize.h;
       var h = Math.min(logoSize.h * 2, 180), w = h * aspect;
       var maxW = 300; if (w > maxW) { w = maxW; h = w / aspect; }
-      logoExt = { width: Math.round(w), height: Math.round(h) };
+      logoExt = { width: Math.round(w * 2 / 3), height: Math.round(h * 2 / 3) };
     }
-    var logoRows = Math.max(3, Math.ceil((logoExt.height + 10) / 20));
+    var logoRows = Math.max(2, Math.ceil(logoExt.height / 20));
     var thin = { style: "thin", color: { argb: "FFDDDDDD" } };
     var borderAll = { top: thin, bottom: thin, left: thin, right: thin };
     function styledSheet(name, header, widths, rows, importCol, title, withLogo) {
@@ -887,7 +887,7 @@
       if (withLogo || title) {
         for (var rr = 1; rr <= logoRows; rr++) ws.getRow(rr).height = 20;
         ws.mergeCells(1, 1, logoRows, header.length);
-        var tc = ws.getCell(1, 1); tc.value = title || name; tc.font = { bold: true, size: 16 }; tc.alignment = { vertical: "middle", horizontal: "center" };
+        var tc = ws.getCell(1, 1); tc.value = title || name; tc.font = { bold: true, size: 28 }; tc.alignment = { vertical: "middle", horizontal: "center" };
         if (withLogo && logoId != null) { try { ws.addImage(logoId, { tl: { col: 0, row: 0 }, ext: { width: logoExt.width, height: logoExt.height } }); } catch (e) { } }
       }
       var headRow = ws.getRow(hr);
