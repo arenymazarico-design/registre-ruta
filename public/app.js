@@ -10,7 +10,7 @@
   };
   var CAT_KEYS = Object.keys(CATS);
   var EXPENSE_KEYS = CAT_KEYS.filter(function (k) { return k !== "combustible"; });
-  var APP_VERSION = "2025-07-03 · km-excel-detall";
+  var APP_VERSION = "2025-07-03 · columnes-amples";
 
   // ---------- Idioma (català per defecte / castellà) ----------
   var lang = localStorage.getItem("lang") || "ca";
@@ -915,7 +915,7 @@
   function xlsxKmUserSheet(ctx, name, title, groups) {
     var header = ["Data", "Gasolinera", "Litres", "Import"];
     var ws = ctx.wb.addWorksheet(name);
-    ws.columns = [{ width: 12 }, { width: 28 }, { width: 12 }, { width: 12 }];
+    ws.columns = [{ width: 13 }, { width: 42 }, { width: 12 }, { width: 14 }];
     var hr = xlsxTop(ws, ctx, header, title, true);
     var ri = hr + 1, gL = 0, gC = 0, gKm = 0;
     function bandRow(r, txt, litres, cost, argb, top) {
@@ -939,14 +939,14 @@
   async function buildConsultaXlsx(list) {
     var ctx = await xlsxCtx();
     var headerAll = ["Data", "Usuari", "Número de factura", "Número tiquet", "Tipus de gasto", "Restaurant/Proveïdor", "Import", "Acompanyants", "Observacions"];
-    xlsxFlatSheet(ctx, "Consulta", headerAll, [12, 20, 16, 14, 13, 26, 12, 22, 28], list.map(rowAllExp), 7, null, false, true);
+    xlsxFlatSheet(ctx, "Consulta", headerAll, [13, 24, 18, 16, 15, 34, 13, 28, 40], list.map(rowAllExp), 7, null, false, true);
     var byUser = {}, order = [];
     list.forEach(function (e) { if (!byUser[e.userId]) { byUser[e.userId] = []; order.push(e.userId); } byUser[e.userId].push(e); });
     var headerU = ["Data", "Número de factura", "Número tiquet", "Tipus de gasto", "Restaurant/Proveïdor", "Import", "Acompanyants", "Observacions"];
     var used = { "consulta": 1 };
     order.forEach(function (uid) {
       var nm = byUser[uid][0].user || "Usuari";
-      xlsxFlatSheet(ctx, safeSheet(nm, used), headerU, [12, 16, 14, 13, 26, 12, 22, 28], byUser[uid].map(rowUserExp), 6, "Despeses · " + nm, true, true);
+      xlsxFlatSheet(ctx, safeSheet(nm, used), headerU, [13, 18, 16, 15, 34, 13, 28, 40], byUser[uid].map(rowUserExp), 6, "Despeses · " + nm, true, true);
     });
     var buf = await ctx.wb.xlsx.writeBuffer();
     dlBlob(new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), "consulta.xlsx");
@@ -1230,7 +1230,7 @@
     var mens = [];
     monthlyRows().forEach(function (r) { mens.push([monthLabel(r.ym) + (r.estimated ? " (~)" : ""), Number(r.dist.toFixed(0)), Number(r.litres.toFixed(2)), Number(r.avg.toFixed(2)), Number(r.cost.toFixed(2))]); });
     var t = totalsFor(scope); mens.push(["TOTAL", Number(t.dist.toFixed(0)), Number(t.litres.toFixed(2)), Number(t.avg.toFixed(2)), Number(t.cost.toFixed(2))]);
-    xlsxFlatSheet(ctx, "Resum mensual", ["Mes", "Km", "Litres", "Consum (L/100km)", "Cost (€)"], [18, 10, 10, 16, 12], mens, 5, null, false, false);
+    xlsxFlatSheet(ctx, "Resum mensual", ["Mes", "Km", "Litres", "Consum (L/100km)", "Cost (€)"], [22, 12, 12, 20, 14], mens, 5, null, false, false);
 
     var usr = [];
     scope.forEach(function (uid) {
@@ -1239,13 +1239,13 @@
       var fp = {}; uf.forEach(function (e) { fp[e.plate || ""] = 1; }); Object.keys(fp).forEach(function (p) { if (pl.indexOf(p) < 0) pl.push(p); });
       pl.sort().forEach(function (p) { var list = uf.filter(function (e) { return (e.plate || "") === p; }); var d = distanceForUserPlate(uid, p, b.from, addDay(b.to, 1)); var lit = litresSum(list), cost = costSum(list); if (d > 0 || lit > 0) usr.push([userName(uid), p || "", Number(d.toFixed(0)), Number(lit.toFixed(2)), Number((d > 0 ? lit / d * 100 : 0).toFixed(2)), Number(cost.toFixed(2))]); });
     });
-    xlsxFlatSheet(ctx, "Per usuari", ["Usuari", "Matrícula", "Km", "Litres", "Consum (L/100km)", "Cost (€)"], [20, 14, 10, 10, 16, 12], usr, 6, null, false, false);
+    xlsxFlatSheet(ctx, "Per usuari", ["Usuari", "Matrícula", "Km", "Litres", "Consum (L/100km)", "Cost (€)"], [26, 16, 12, 12, 20, 14], usr, 6, null, false, false);
 
     var lects = readings.filter(function (r) { return scope.indexOf(r.userId) >= 0 && (!km.plate || (r.plate || "") === km.plate); }).slice().sort(function (a, c) { return a.date < c.date ? -1 : 1; }).map(function (r) { return [monthLabel(r.ym), r.date, r.user, r.plate || "", r.km != null ? Number(r.km) : ""]; });
-    xlsxFlatSheet(ctx, "Lectures km", ["Mes", "Data", "Usuari", "Matrícula", "Km"], [16, 12, 20, 14, 10], lects, null, null, false, false);
+    xlsxFlatSheet(ctx, "Lectures km", ["Mes", "Data", "Usuari", "Matrícula", "Km"], [20, 14, 26, 16, 12], lects, null, null, false, false);
 
     var det = fuelInRange(scope, b.from, b.to).slice().sort(function (a, c) { return a.date < c.date ? -1 : 1; }).map(function (e) { return [e.date, e.user, e.plate || "", e.place || "", e.litres != null ? Number(e.litres) : "", Number(e.amount)]; });
-    xlsxFlatSheet(ctx, "Repostatges", ["Data", "Usuari", "Matrícula", "Gasolinera", "Litres", "Import"], [12, 20, 14, 26, 10, 12], det, 6, null, false, false);
+    xlsxFlatSheet(ctx, "Repostatges", ["Data", "Usuari", "Matrícula", "Gasolinera", "Litres", "Import"], [13, 24, 16, 42, 12, 14], det, 6, null, false, false);
 
     var used = { "resum mensual": 1, "per usuari": 1, "lectures km": 1, "repostatges": 1 };
     scope.forEach(function (uid) {
