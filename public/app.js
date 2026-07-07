@@ -10,7 +10,7 @@
   };
   var CAT_KEYS = Object.keys(CATS);
   var EXPENSE_KEYS = CAT_KEYS.filter(function (k) { return k !== "combustible"; });
-  var APP_VERSION = "2025-07-03 · plantilles-cif";
+  var APP_VERSION = "2025-07-03 · km-detall";
 
   // ---------- Idioma (català per defecte / castellà) ----------
   var lang = localStorage.getItem("lang") || "ca";
@@ -900,9 +900,9 @@
   function nextMonthFirst(ym) { var y = +ym.slice(0, 4), m = +ym.slice(5, 7) + 1; if (m > 12) { m = 1; y++; } return y + "-" + String(m).padStart(2, "0") + "-01"; }
   function monthsBetween(fy, ty) { var out = [], y = +fy.slice(0, 4), m = +fy.slice(5, 7), ey = +ty.slice(0, 4), em = +ty.slice(5, 7), g = 0; while ((y < ey || (y === ey && m <= em)) && g < 600) { out.push(y + "-" + String(m).padStart(2, "0")); m++; if (m > 12) { m = 1; y++; } g++; } return out; }
 
-  function readingsOf(userId) { return readings.filter(function (r) { return r.userId === userId && r.km != null && (!km.plate || (r.plate || "") === km.plate); }).slice().sort(function (a, b) { return dayNum(a.date) - dayNum(b.date); }); }
-  function kmAt(userId, dateStr) {
-    var r = readingsOf(userId);
+  function readingsOf(userId, plate) { return readings.filter(function (r) { return r.userId === userId && r.km != null && (r.plate || "") === plate; }).slice().sort(function (a, b) { return dayNum(a.date) - dayNum(b.date); }); }
+  function kmAt(userId, plate, dateStr) {
+    var r = readingsOf(userId, plate);
     if (!r.length) return null;
     if (r.length === 1) return r[0].km;
     var t = dayNum(dateStr);
@@ -911,9 +911,21 @@
     for (var i = 0; i < r.length - 1; i++) { var d0 = dayNum(r[i].date), d1 = dayNum(r[i + 1].date); if (t >= d0 && t <= d1) { var f = (t - d0) / ((d1 - d0) || 1); return r[i].km + (r[i + 1].km - r[i].km) * f; } }
     return r[r.length - 1].km;
   }
+  function platesForUser(userId) {
+    var set = {}, out = [];
+    readings.forEach(function (r) { if (r.userId === userId && r.km != null) { var p = r.plate || ""; if (!(p in set)) { set[p] = 1; out.push(p); } } });
+    return out;
+  }
+  function distanceForUserPlate(userId, plate, from, toExcl) {
+    var kf = kmAt(userId, plate, from), kt = kmAt(userId, plate, toExcl);
+    return (kf != null && kt != null) ? Math.max(0, kt - kf) : 0;
+  }
   function distanceFor(scope, from, toExcl) {
     var total = 0;
-    scope.forEach(function (uid) { var kf = kmAt(uid, from), kt = kmAt(uid, toExcl); if (kf != null && kt != null) total += Math.max(0, kt - kf); });
+    scope.forEach(function (uid) {
+      var plates = km.plate ? [km.plate] : platesForUser(uid);
+      plates.forEach(function (p) { total += distanceForUserPlate(uid, p, from, toExcl); });
+    });
     return total;
   }
   function scopeUsers() { if (!admin) return [me.id]; if (km.users.length) return km.users.slice(); return roster.map(function (u) { return u.id; }); }
@@ -946,7 +958,7 @@
   }
   function totalsFor(scope) {
     var b = rangeBounds();
-    var dist = distanceFor(scope, b.from, addDay(b.to, 1));
+    var dist = monthlyRows().reduce(function (s, r) { return s + r.dist; }, 0);
     var fuel = fuelInRange(scope, b.from, b.to);
     var lit = litresSum(fuel), cost = costSum(fuel);
     return { dist: dist, litres: lit, cost: cost, avg: dist > 0 ? lit / dist * 100 : 0, count: fuel.length };
@@ -977,6 +989,41 @@
     var total = '<tr class="grand"><td>TOTAL</td><td class="num">' + fmt(tD, 0) + '</td><td class="num">' + fmt(tL, 2) + '</td><td class="num">' + fmt(avg, 2) + '</td><td class="num">' + eur(tC) + '</td></tr>';
     return '<table class="rep">' + head + body + total + '</table>';
   }
+  function detailTable(list, showUser, dist) {
+    var head = '<tr><th>Data</th>' + (showUser ? '<th>Usuari</th>' : '') + '<th>Matrícula</th><th class="num">Litres</th><th class="num">Import</th></tr>';
+    var body = list.slice().sort(function (a, b) { return a.date < b.date ? -1 : (a.date > b.date ? 1 : 0); }).map(function (e) {
+      return '<tr><td>' + e.date + '</td>' + (showUser ? '<td>' + esc(e.user) + '</td>' : '') + '<td>' + esc(e.plate || '') + '</td><td class="num">' + (e.litres != null ? fmt(e.litres, 2) : '') + '</td><td class="num">' + eur(e.amount) + '</td></tr>';
+    }).join("");
+    var lit = litresSum(list), cost = costSum(list), avg = dist > 0 ? lit / dist * 100 : 0;
+    var sub = '<tr class="grand"><td colspan="' + (showUser ? 3 : 2) + '">TOTAL · Km: ' + fmt(dist, 0) + ' · ' + fmt(avg, 2) + ' L/100km</td><td class="num">' + fmt(lit, 2) + '</td><td class="num">' + eur(cost) + '</td></tr>';
+    return '<table class="rep">' + head + body + sub + '</table>';
+  }
+  function reportDetailed() {
+    var scope = scopeUsers(), b = rangeBounds();
+    var list = fuelInRange(scope, b.from, b.to);
+    var dist = distanceFor(scope, b.from, addDay(b.to, 1));
+    if (!list.length && dist <= 0) return '<p style="color:var(--muted)">Sense dades.</p>';
+    return detailTable(list, true, dist);
+  }
+  function reportGrouped() {
+    var scope = scopeUsers(), b = rangeBounds(), html = "";
+    scope.forEach(function (uid) {
+      var userFuel = fuelInRange([uid], b.from, b.to);
+      var plates = km.plate ? [km.plate] : platesForUser(uid).slice();
+      var fp = {}; userFuel.forEach(function (e) { fp[e.plate || ""] = 1; });
+      Object.keys(fp).forEach(function (p) { if (plates.indexOf(p) < 0) plates.push(p); });
+      var uHtml = "", any = false;
+      plates.sort().forEach(function (p) {
+        var list = userFuel.filter(function (e) { return (e.plate || "") === p; });
+        var dist = distanceForUserPlate(uid, p, b.from, addDay(b.to, 1));
+        if (!list.length && dist <= 0) return;
+        any = true;
+        uHtml += '<div class="rep-group-title" style="font-size:13px;margin:10px 0 4px;color:var(--muted)">' + esc(p || "(sense matrícula)") + '</div>' + detailTable(list, false, dist);
+      });
+      if (any) html += '<div class="rep-group-title">' + esc(userName(uid)) + '</div>' + uHtml;
+    });
+    return html || '<p style="color:var(--muted)">Sense dades.</p>';
+  }
   function refreshKmMsel() {
     var tags = el("kmUserTags"), list = el("kmUserList");
     if (!tags || !list) return;
@@ -990,7 +1037,7 @@
     tags.querySelectorAll("[data-rem]").forEach(function (b) { b.onclick = function () { var id = b.getAttribute("data-rem"); var i = km.users.indexOf(id); if (i >= 0) km.users.splice(i, 1); refreshKmMsel(); renderKmReport(); }; });
     list.querySelectorAll(".msel-opt").forEach(function (o) { o.onclick = function () { var id = o.getAttribute("data-id"); var i = km.users.indexOf(id); if (i >= 0) km.users.splice(i, 1); else km.users.push(id); refreshKmMsel(); renderKmReport(); }; });
   }
-  function renderKmReport() { el("kmReport").innerHTML = (admin && km.group) ? reportByUser() : reportMonthly(); }
+  function renderKmReport() { el("kmReport").innerHTML = (admin && km.group) ? reportGrouped() : reportDetailed(); }
   function renderKm() {
     var addBtns = '<div class="actions" style="margin-bottom:12px"><button type="button" class="btn-primary" id="fuAddPhoto"><span class="cam">📷</span> Repostatge (foto)</button><button type="button" class="btn-ghost" id="fuAddManual" style="flex:0 0 auto;width:auto;padding:14px 18px">Sense foto</button></div>';
     var myFuel = entries.filter(function (e) { return e.cat === "combustible" && (admin || e.userId === me.id); }).slice().sort(function (a, b) { return a.date < b.date ? 1 : -1; });
@@ -1000,6 +1047,14 @@
         '<div style="min-width:0"><b style="font-size:14px">' + esc(e.place || "Gasolinera") + '</b><div style="font-size:12px;color:var(--muted)">' + e.date + (admin ? " · " + esc(e.user) : "") + (e.plate ? " · " + esc(e.plate) : "") + '</div></div>' +
         '<div style="text-align:right;white-space:nowrap"><div style="font-family:var(--mono);font-weight:700">' + (e.litres != null ? fmt(e.litres, 2) + " L" : "") + '</div><div style="font-size:12px;color:var(--muted)">' + eur(e.amount) + '</div></div></div>';
     }).join("") : '<p style="font-size:13px;color:var(--muted);margin:0 0 8px">Cap repostatge encara.</p>';
+
+    var myReads = readings.filter(function (r) { return (admin || r.userId === me.id) && (!km.plate || (r.plate || "") === km.plate); }).slice().sort(function (a, b) { return a.date < b.date ? 1 : -1; });
+    var readsHtml = '<div style="height:1px;background:var(--line);margin:16px 0"></div><label style="display:block;font-size:12px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--muted);margin-bottom:6px">Lectures de km (toca per editar)</label>';
+    readsHtml += myReads.length ? myReads.slice(0, 80).map(function (r) {
+      return '<div class="readrow" data-id="' + r.id + '" style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 12px;border:1px solid var(--line);border-radius:11px;margin-bottom:7px;cursor:pointer">' +
+        '<div style="min-width:0"><b style="font-size:14px">' + monthLabel(r.ym) + '</b><div style="font-size:12px;color:var(--muted)">' + r.date + (r.plate ? " · " + esc(r.plate) : "") + (admin ? " · " + esc(r.user) : "") + '</div></div>' +
+        '<div style="font-family:var(--mono);font-weight:700;white-space:nowrap">' + fmt(r.km, 0) + ' km</div></div>';
+    }).join("") : '<p style="font-size:13px;color:var(--muted);margin:0 0 8px">Cap lectura encara.</p>';
 
     var filters = "";
     if (admin) {
@@ -1015,12 +1070,13 @@
     var sep = '<div style="height:1px;background:var(--line);margin:16px 0"></div><label style="display:block;font-size:12px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Informe de km i consum</label>';
     var plates = platesInScope();
     var plateSel = plates.length ? ('<div class="field"><label for="kmPlate">Matrícula</label><select id="kmPlate"><option value="">Totes les matrícules</option>' + plates.map(function (p) { return '<option value="' + esc(p) + '"' + (km.plate === p ? ' selected' : '') + '>' + (p ? esc(p) : '(sense matrícula)') + '</option>'; }).join("") + '</select></div>') : '';
-    el("kmBody").innerHTML = addBtns + fuelListHtml + sep + filters + plateSel + '<div class="repwrap" id="kmReport"></div>' + note + actions;
+    el("kmBody").innerHTML = addBtns + fuelListHtml + sep + filters + plateSel + '<div class="repwrap" id="kmReport"></div>' + note + actions + readsHtml;
     renderKmReport();
 
     el("fuAddPhoto").onclick = function () { pendingFuel = true; retakeMode = false; pendingPhoto = null; closeKm(); el("photo").value = ""; el("photo").click(); };
     el("fuAddManual").onclick = function () { pendingFuel = true; pendingPhoto = null; closeKm(); openSheetNew(null, false); };
     el("kmBody").querySelectorAll(".fuelrow").forEach(function (r) { r.onclick = function () { openSheet(r.getAttribute("data-id")); }; });
+    el("kmBody").querySelectorAll(".readrow").forEach(function (r) { r.onclick = function () { openReadEdit(r.getAttribute("data-id")); }; });
     var kp = el("kmPlate"); if (kp) kp.onchange = function () { km.plate = kp.value; renderKmReport(); };
 
     if (admin) {
@@ -1034,7 +1090,7 @@
     el("kmPrint").onclick = printKm;
   }
   function printKm() {
-    el("printArea").innerHTML = '<h2>Informe de km i combustible</h2>' + ((admin && km.group) ? reportByUser() : reportMonthly());
+    el("printArea").innerHTML = '<h2>Informe de km i combustible</h2>' + ((admin && km.group) ? reportGrouped() : reportDetailed());
     window.print();
   }
   function exportKm() {
@@ -1042,16 +1098,19 @@
     var scope = scopeUsers(), b = rangeBounds();
     var fuel = fuelInRange(scope, b.from, b.to);
     if (!fuel.length && !readings.length) { toast("No hi ha registres per exportar"); return; }
-    var det = [["Data", "Usuari", "Gasolinera", "Litres", "Import"]].concat(
-      fuel.slice().sort(function (a, c) { return a.date < c.date ? -1 : 1; }).map(function (e) { return [e.date, e.user, e.place || "", e.litres != null ? Number(e.litres) : "", Number(e.amount)]; }));
+    var det = [["Data", "Usuari", "Matrícula", "Gasolinera", "Litres", "Import"]].concat(
+      fuel.slice().sort(function (a, c) { return a.date < c.date ? -1 : 1; }).map(function (e) { return [e.date, e.user, e.plate || "", e.place || "", e.litres != null ? Number(e.litres) : "", Number(e.amount)]; }));
     var mens = [["Mes", "Km", "Litres", "Consum (L/100km)", "Cost (€)"]];
     monthlyRows().forEach(function (r) { mens.push([monthLabel(r.ym) + (r.estimated ? " (~)" : ""), Number(r.dist.toFixed(0)), Number(r.litres.toFixed(2)), Number(r.avg.toFixed(2)), Number(r.cost.toFixed(2))]); });
     var t = totalsFor(scope); mens.push(["TOTAL", Number(t.dist.toFixed(0)), Number(t.litres.toFixed(2)), Number(t.avg.toFixed(2)), Number(t.cost.toFixed(2))]);
     var usr = [["Usuari", "Km", "Litres", "Consum (L/100km)", "Cost (€)"]];
     scope.forEach(function (uid) { var d = distanceFor([uid], b.from, addDay(b.to, 1)); var f = fuelInRange([uid], b.from, b.to); var lit = litresSum(f), cost = costSum(f); if (d > 0 || lit > 0) usr.push([userName(uid), Number(d.toFixed(0)), Number(lit.toFixed(2)), Number((d > 0 ? lit / d * 100 : 0).toFixed(2)), Number(cost.toFixed(2))]); });
+    var lects = [["Mes", "Data", "Usuari", "Matrícula", "Km"]];
+    readings.filter(function (r) { return scope.indexOf(r.userId) >= 0 && (!km.plate || (r.plate || "") === km.plate); }).slice().sort(function (a, c) { return a.date < c.date ? -1 : 1; }).forEach(function (r) { lects.push([monthLabel(r.ym), r.date, r.user, r.plate || "", r.km != null ? Number(r.km) : ""]); });
     var wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(mens), "Resum mensual");
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(usr), "Per usuari");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(lects), "Lectures km");
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(det), "Repostatges");
     XLSX.writeFile(wb, "km-combustible.xlsx");
     toast("Excel generat");
@@ -1060,11 +1119,23 @@
   // ---------- Lectura mensual de km + recordatori ----------
   function myActivePlate() { var u = roster.filter(function (x) { return x.id === me.id; })[0]; return (u && u.activePlate) ? u.activePlate : ""; }
   function myHasVehicle() { var u = roster.filter(function (x) { return x.id === me.id; })[0]; return !u || u.hasVehicle !== false; }
+  var readEditId = null;
   function openRead() {
+    readEditId = null;
     var today = todayStr(); el("readDate").value = today;
+    el("readInfo").textContent = "Apunta la lectura del comptador de km del cotxe. Es demana un cop al mes.";
+    el("readDel").style.display = "none";
     var ym = today.slice(0, 7), ap = myActivePlate();
     var ex = readings.filter(function (r) { return r.userId === me.id && r.ym === ym && (r.plate || "") === ap; })[0];
     el("readKm").value = ex ? ex.km : "";
+    el("readScrim").setAttribute("data-open", "true"); el("readSheet").setAttribute("data-open", "true");
+  }
+  function openReadEdit(id) {
+    var r = readings.filter(function (x) { return x.id === id; })[0]; if (!r) return;
+    readEditId = id;
+    el("readKm").value = r.km; el("readDate").value = r.date;
+    el("readInfo").textContent = "Lectura de " + (r.plate || "(sense matrícula)") + (admin ? " · " + r.user : "");
+    el("readDel").style.display = "";
     el("readScrim").setAttribute("data-open", "true"); el("readSheet").setAttribute("data-open", "true");
   }
   function closeRead() { el("readScrim").removeAttribute("data-open"); el("readSheet").removeAttribute("data-open"); }
@@ -1072,7 +1143,17 @@
   el("readSave").onclick = async function () {
     var v = el("readKm").value;
     if (v === "" || isNaN(Number(v))) { toast("Posa els km", { error: true }); return; }
-    try { await api("/api/readings", "POST", { km: Number(v), date: el("readDate").value || todayStr() }); await loadReadings(); closeRead(); hideKmReminder(); toast("Km desats"); }
+    try {
+      var payload = { km: Number(v), date: el("readDate").value || todayStr() };
+      if (readEditId) payload.id = readEditId;
+      await api("/api/readings", "POST", payload); await loadReadings(); closeRead(); hideKmReminder();
+      if (el("kmSheet").getAttribute("data-open") === "true") renderKm();
+      toast("Km desats");
+    } catch (e) { toast(e.message, { error: true }); }
+  };
+  el("readDel").onclick = async function () {
+    if (!readEditId) return;
+    try { await api("/api/readings?id=" + encodeURIComponent(readEditId), "DELETE"); await loadReadings(); closeRead(); if (el("kmSheet").getAttribute("data-open") === "true") renderKm(); toast("Lectura eliminada"); }
     catch (e) { toast(e.message, { error: true }); }
   };
   function hasReadingThisMonth() { var ym = todayStr().slice(0, 7), ap = myActivePlate(); return readings.some(function (r) { return r.userId === me.id && r.ym === ym && (r.plate || "") === ap; }); }
