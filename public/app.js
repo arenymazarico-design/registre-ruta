@@ -10,7 +10,7 @@
   };
   var CAT_KEYS = Object.keys(CATS);
   var EXPENSE_KEYS = CAT_KEYS.filter(function (k) { return k !== "combustible"; });
-  var APP_VERSION = "2025-07-03 · km-detall";
+  var APP_VERSION = "2025-07-03 · peruser-matricula";
 
   // ---------- Idioma (català per defecte / castellà) ----------
   var lang = localStorage.getItem("lang") || "ca";
@@ -1103,8 +1103,19 @@
     var mens = [["Mes", "Km", "Litres", "Consum (L/100km)", "Cost (€)"]];
     monthlyRows().forEach(function (r) { mens.push([monthLabel(r.ym) + (r.estimated ? " (~)" : ""), Number(r.dist.toFixed(0)), Number(r.litres.toFixed(2)), Number(r.avg.toFixed(2)), Number(r.cost.toFixed(2))]); });
     var t = totalsFor(scope); mens.push(["TOTAL", Number(t.dist.toFixed(0)), Number(t.litres.toFixed(2)), Number(t.avg.toFixed(2)), Number(t.cost.toFixed(2))]);
-    var usr = [["Usuari", "Km", "Litres", "Consum (L/100km)", "Cost (€)"]];
-    scope.forEach(function (uid) { var d = distanceFor([uid], b.from, addDay(b.to, 1)); var f = fuelInRange([uid], b.from, b.to); var lit = litresSum(f), cost = costSum(f); if (d > 0 || lit > 0) usr.push([userName(uid), Number(d.toFixed(0)), Number(lit.toFixed(2)), Number((d > 0 ? lit / d * 100 : 0).toFixed(2)), Number(cost.toFixed(2))]); });
+    var usr = [["Usuari", "Matrícula", "Km", "Litres", "Consum (L/100km)", "Cost (€)"]];
+    scope.forEach(function (uid) {
+      var userFuel = fuelInRange([uid], b.from, b.to);
+      var plates = km.plate ? [km.plate] : platesForUser(uid).slice();
+      var fp = {}; userFuel.forEach(function (e) { fp[e.plate || ""] = 1; });
+      Object.keys(fp).forEach(function (p) { if (plates.indexOf(p) < 0) plates.push(p); });
+      plates.sort().forEach(function (p) {
+        var list = userFuel.filter(function (e) { return (e.plate || "") === p; });
+        var d = distanceForUserPlate(uid, p, b.from, addDay(b.to, 1));
+        var lit = litresSum(list), cost = costSum(list);
+        if (d > 0 || lit > 0) usr.push([userName(uid), p || "", Number(d.toFixed(0)), Number(lit.toFixed(2)), Number((d > 0 ? lit / d * 100 : 0).toFixed(2)), Number(cost.toFixed(2))]);
+      });
+    });
     var lects = [["Mes", "Data", "Usuari", "Matrícula", "Km"]];
     readings.filter(function (r) { return scope.indexOf(r.userId) >= 0 && (!km.plate || (r.plate || "") === km.plate); }).slice().sort(function (a, c) { return a.date < c.date ? -1 : 1; }).forEach(function (r) { lects.push([monthLabel(r.ym), r.date, r.user, r.plate || "", r.km != null ? Number(r.km) : ""]); });
     var wb = XLSX.utils.book_new();
