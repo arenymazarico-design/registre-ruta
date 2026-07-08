@@ -1,0 +1,11 @@
+# Configuració de Netlify
+[build]
+  publish = "public"
+  functions = "netlify/functions"
+
+[functions]
+  # Les funcions són ES modules (.mjs) i usen l'API estàndard de Request/Response.
+  node_bundler = "esbuild"
+
+# Les rutes /api/* les declara cada funció amb `export const config = { path }`,
+# així que no calen redirects addicionals.
