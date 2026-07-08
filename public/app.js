@@ -10,7 +10,7 @@
   };
   var CAT_KEYS = Object.keys(CATS);
   var EXPENSE_KEYS = CAT_KEYS.filter(function (k) { return k !== "combustible"; });
-  var APP_VERSION = "2025-07-03 · editar-matricula";
+  var APP_VERSION = "2025-07-03 · km-filtre2";
 
   // ---------- Idioma (català per defecte / castellà) ----------
   var lang = localStorage.getItem("lang") || "ca";
@@ -1173,28 +1173,35 @@
       var sel = km.users.indexOf(u.id) >= 0;
       return '<div class="msel-opt" data-id="' + u.id + '" data-sel="' + sel + '"><span class="ck">' + (sel ? "✓" : "") + '</span>' + esc(u.name) + '</div>';
     }).join("") : '<div class="msel-empty">Cap usuari</div>';
-    tags.querySelectorAll("[data-rem]").forEach(function (b) { b.onclick = function () { var id = b.getAttribute("data-rem"); var i = km.users.indexOf(id); if (i >= 0) km.users.splice(i, 1); refreshKmMsel(); renderKmReport(); }; });
-    list.querySelectorAll(".msel-opt").forEach(function (o) { o.onclick = function () { var id = o.getAttribute("data-id"); var i = km.users.indexOf(id); if (i >= 0) km.users.splice(i, 1); else km.users.push(id); refreshKmMsel(); renderKmReport(); }; });
+    tags.querySelectorAll("[data-rem]").forEach(function (b) { b.onclick = function () { var id = b.getAttribute("data-rem"); var i = km.users.indexOf(id); if (i >= 0) km.users.splice(i, 1); refreshKmMsel(); renderKmReport(); renderKmLists(); }; });
+    list.querySelectorAll(".msel-opt").forEach(function (o) { o.onclick = function () { var id = o.getAttribute("data-id"); var i = km.users.indexOf(id); if (i >= 0) km.users.splice(i, 1); else km.users.push(id); refreshKmMsel(); renderKmReport(); renderKmLists(); }; });
   }
   function renderKmReport() { el("kmReport").innerHTML = (admin && km.group) ? reportGrouped() : reportDetailed(); }
+  function kmFuelRow(e) {
+    return '<div class="fuelrow" data-id="' + e.id + '" style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 12px;border:1px solid var(--line);border-radius:11px;margin-bottom:7px;cursor:pointer">' +
+      '<div style="min-width:0"><b style="font-size:14px">' + esc(e.place || "Gasolinera") + '</b><div style="font-size:12px;color:var(--muted)">' + e.date + (admin ? " · " + esc(e.user) : "") + (e.plate ? " · " + esc(e.plate) : "") + '</div></div>' +
+      '<div style="text-align:right;white-space:nowrap"><div style="font-family:var(--mono);font-weight:700">' + (e.litres != null ? fmt(e.litres, 2) + " L" : "") + '</div><div style="font-size:12px;color:var(--muted)">' + eur(e.amount) + '</div></div></div>';
+  }
+  function kmReadRow(r) {
+    return '<div class="readrow" data-id="' + r.id + '" style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 12px;border:1px solid var(--line);border-radius:11px;margin-bottom:7px;cursor:pointer">' +
+      '<div style="min-width:0"><b style="font-size:14px">' + monthLabel(r.ym) + '</b><div style="font-size:12px;color:var(--muted)">' + r.date + (r.plate ? " · " + esc(r.plate) : "") + (admin ? " · " + esc(r.user) : "") + '</div></div>' +
+      '<div style="font-family:var(--mono);font-weight:700;white-space:nowrap">' + fmt(r.km, 0) + ' km</div></div>';
+  }
+  function renderKmLists() {
+    if (!el("kmFuelList")) return;
+    var scope = scopeUsers();
+    function inRange(d) { return (!km.from || d >= km.from) && (!km.to || d <= km.to); }
+    var fuel = entries.filter(function (e) { return e.cat === "combustible" && scope.indexOf(e.userId) >= 0 && (!km.plate || (e.plate || "") === km.plate) && inRange(e.date); }).slice().sort(function (a, b) { return a.date < b.date ? 1 : -1; });
+    el("kmFuelList").innerHTML = '<label style="display:block;font-size:12px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--muted);margin:4px 0 6px">Repostatges (' + fuel.length + ')</label>' +
+      (fuel.length ? fuel.slice(0, 120).map(kmFuelRow).join("") : '<p style="font-size:13px;color:var(--muted);margin:0 0 8px">Cap repostatge.</p>');
+    el("kmFuelList").querySelectorAll(".fuelrow").forEach(function (r) { r.onclick = function () { openSheet(r.getAttribute("data-id")); }; });
+    var reads = readings.filter(function (r) { return scope.indexOf(r.userId) >= 0 && (!km.plate || (r.plate || "") === km.plate) && inRange(r.date); }).slice().sort(function (a, b) { return a.date < b.date ? 1 : -1; });
+    el("kmReadsList").innerHTML = '<div style="height:1px;background:var(--line);margin:16px 0"></div><label style="display:block;font-size:12px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--muted);margin-bottom:6px">Lectures de km · toca per editar (' + reads.length + ')</label>' +
+      (reads.length ? reads.slice(0, 150).map(kmReadRow).join("") : '<p style="font-size:13px;color:var(--muted);margin:0 0 8px">Cap lectura.</p>');
+    el("kmReadsList").querySelectorAll(".readrow").forEach(function (r) { r.onclick = function () { openReadEdit(r.getAttribute("data-id")); }; });
+  }
   function renderKm() {
     var addBtns = '<div class="actions" style="margin-bottom:12px"><button type="button" class="btn-primary" id="fuAddPhoto"><span class="cam">📷</span> Repostatge (foto)</button><button type="button" class="btn-ghost" id="fuAddManual" style="flex:0 0 auto;width:auto;padding:14px 18px">Sense foto</button></div>';
-    var myFuel = entries.filter(function (e) { return e.cat === "combustible" && (admin || e.userId === me.id); }).slice().sort(function (a, b) { return a.date < b.date ? 1 : -1; });
-    var fuelListHtml = '<label style="display:block;font-size:12px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--muted);margin:4px 0 6px">Repostatges' + (admin ? " (tots)" : "") + '</label>';
-    fuelListHtml += myFuel.length ? myFuel.slice(0, 60).map(function (e) {
-      return '<div class="fuelrow" data-id="' + e.id + '" style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 12px;border:1px solid var(--line);border-radius:11px;margin-bottom:7px;cursor:pointer">' +
-        '<div style="min-width:0"><b style="font-size:14px">' + esc(e.place || "Gasolinera") + '</b><div style="font-size:12px;color:var(--muted)">' + e.date + (admin ? " · " + esc(e.user) : "") + (e.plate ? " · " + esc(e.plate) : "") + '</div></div>' +
-        '<div style="text-align:right;white-space:nowrap"><div style="font-family:var(--mono);font-weight:700">' + (e.litres != null ? fmt(e.litres, 2) + " L" : "") + '</div><div style="font-size:12px;color:var(--muted)">' + eur(e.amount) + '</div></div></div>';
-    }).join("") : '<p style="font-size:13px;color:var(--muted);margin:0 0 8px">Cap repostatge encara.</p>';
-
-    var myReads = readings.filter(function (r) { return (admin || r.userId === me.id) && (!km.plate || (r.plate || "") === km.plate); }).slice().sort(function (a, b) { return a.date < b.date ? 1 : -1; });
-    var readsHtml = '<div style="height:1px;background:var(--line);margin:16px 0"></div><label style="display:block;font-size:12px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--muted);margin-bottom:6px">Lectures de km (toca per editar)</label>';
-    readsHtml += myReads.length ? myReads.slice(0, 80).map(function (r) {
-      return '<div class="readrow" data-id="' + r.id + '" style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 12px;border:1px solid var(--line);border-radius:11px;margin-bottom:7px;cursor:pointer">' +
-        '<div style="min-width:0"><b style="font-size:14px">' + monthLabel(r.ym) + '</b><div style="font-size:12px;color:var(--muted)">' + r.date + (r.plate ? " · " + esc(r.plate) : "") + (admin ? " · " + esc(r.user) : "") + '</div></div>' +
-        '<div style="font-family:var(--mono);font-weight:700;white-space:nowrap">' + fmt(r.km, 0) + ' km</div></div>';
-    }).join("") : '<p style="font-size:13px;color:var(--muted);margin:0 0 8px">Cap lectura encara.</p>';
-
     var filters = "";
     if (admin) {
       filters =
@@ -1209,19 +1216,18 @@
     var sep = '<div style="height:1px;background:var(--line);margin:16px 0"></div><label style="display:block;font-size:12px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Informe de km i consum</label>';
     var plates = platesInScope();
     var plateSel = plates.length ? ('<div class="field"><label for="kmPlate">Matrícula</label><select id="kmPlate"><option value="">Totes les matrícules</option>' + plates.map(function (p) { return '<option value="' + esc(p) + '"' + (km.plate === p ? ' selected' : '') + '>' + (p ? esc(p) : '(sense matrícula)') + '</option>'; }).join("") + '</select></div>') : '';
-    el("kmBody").innerHTML = addBtns + fuelListHtml + sep + filters + plateSel + '<div class="repwrap" id="kmReport"></div>' + note + actions + readsHtml;
+    el("kmBody").innerHTML = addBtns + filters + plateSel + '<div id="kmFuelList"></div>' + sep + '<div class="repwrap" id="kmReport"></div>' + note + actions + '<div id="kmReadsList"></div>';
     renderKmReport();
+    renderKmLists();
 
     el("fuAddPhoto").onclick = function () { pendingFuel = true; retakeMode = false; pendingPhoto = null; closeKm(); el("photo").value = ""; el("photo").click(); };
     el("fuAddManual").onclick = function () { pendingFuel = true; pendingPhoto = null; closeKm(); openSheetNew(null, false); };
-    el("kmBody").querySelectorAll(".fuelrow").forEach(function (r) { r.onclick = function () { openSheet(r.getAttribute("data-id")); }; });
-    el("kmBody").querySelectorAll(".readrow").forEach(function (r) { r.onclick = function () { openReadEdit(r.getAttribute("data-id")); }; });
-    var kp = el("kmPlate"); if (kp) kp.onchange = function () { km.plate = kp.value; renderKmReport(); };
+    var kp = el("kmPlate"); if (kp) kp.onchange = function () { km.plate = kp.value; renderKmReport(); renderKmLists(); };
 
     if (admin) {
       var us = el("kmUserSearch"); if (us) us.oninput = function () { kmUserQuery = us.value; refreshKmMsel(); };
-      el("kmFrom").onchange = function () { km.from = el("kmFrom").value; renderKmReport(); };
-      el("kmTo").onchange = function () { km.to = el("kmTo").value; renderKmReport(); };
+      el("kmFrom").onchange = function () { km.from = el("kmFrom").value; renderKmReport(); renderKmLists(); };
+      el("kmTo").onchange = function () { km.to = el("kmTo").value; renderKmReport(); renderKmLists(); };
       el("kmGroup").onchange = function () { km.group = el("kmGroup").checked; renderKmReport(); };
       refreshKmMsel();
     }
