@@ -271,9 +271,13 @@
         <div class="field"><label for="date">Data</label><input id="date" type="date" required></div>
       </div>
       <div class="field"><label for="place" id="placeLbl">Restaurant o empresa</label><input id="place" type="text" autocomplete="off" placeholder="Nom del comerç"></div>
-      <div class="grid2" id="fuelWrap" style="display:none">
-        <div class="field"><label for="litres">Litres (gasoil)</label><input id="litres" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0"></div>
-        <div class="field"><label for="fuelKm">Km del comptador</label><input id="fuelKm" type="number" inputmode="numeric" step="1" min="0" placeholder="opcional"></div>
+      <div id="fuelWrap" style="display:none">
+        <div class="grid2">
+          <div class="field"><label for="litres">Litres (gasoil)</label><input id="litres" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0"></div>
+          <div class="field"><label for="fuelKm">Km del comptador</label><input id="fuelKm" type="number" inputmode="numeric" step="1" min="0" placeholder="opcional"></div>
+        </div>
+        <div class="field"><label for="fuelPlate">Matrícula</label><input id="fuelPlate" type="text" list="platesList" autocomplete="off" placeholder="Matrícula" style="text-transform:uppercase"></div>
+        <datalist id="platesList"></datalist>
       </div>
       <div class="field" id="compWrap" style="display:none">
         <label for="compCount">Acompanyants (nombre de persones)</label>

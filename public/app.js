@@ -10,7 +10,7 @@
   };
   var CAT_KEYS = Object.keys(CATS);
   var EXPENSE_KEYS = CAT_KEYS.filter(function (k) { return k !== "combustible"; });
-  var APP_VERSION = "2025-07-03 · titol-2linies";
+  var APP_VERSION = "2025-07-03 · editar-matricula";
 
   // ---------- Idioma (català per defecte / castellà) ----------
   var lang = localStorage.getItem("lang") || "ca";
@@ -602,9 +602,16 @@
   function toggleCompanions() {
     el("compWrap").style.display = (selectedCat === "dietes") ? "block" : "none";
     var fuel = (selectedCat === "combustible");
-    el("fuelWrap").style.display = fuel ? "grid" : "none";
+    el("fuelWrap").style.display = fuel ? "block" : "none";
     el("placeLbl").textContent = fuel ? "Gasolinera" : "Restaurant o empresa";
     el("place").placeholder = fuel ? "Nom de la gasolinera" : "Nom del comerç";
+    if (fuel) fillPlatesDatalist();
+  }
+  function fillPlatesDatalist() {
+    var dl = el("platesList"); if (!dl) return;
+    var u = roster.filter(function (x) { return x.id === me.id; })[0];
+    var vs = (u && u.vehicles) ? u.vehicles : [];
+    dl.innerHTML = vs.map(function (p) { return '<option value="' + esc(p) + '"></option>'; }).join("");
   }
   function setThumb(src) { if (src) { el("thumbImg").src = src; el("thumbrow").style.display = "flex"; } else el("thumbrow").style.display = "none"; }
   function setNumberMode(isFactura) { el("ticketLbl").textContent = isFactura ? "Núm. factura" : "Núm. tiquet"; }
@@ -639,6 +646,7 @@
     el("cif").value = isFactura ? companyCif : ""; setNumberMode(isFactura);
     el("place").value = (parsed && parsed.business_name) ? parsed.business_name : "";
     el("litres").value = (parsed && parsed.litres != null) ? parsed.litres : ""; el("fuelKm").value = "";
+    el("fuelPlate").value = isFuel ? myActivePlate() : "";
     el("date").value = (parsed && parsed.date && /^\d{4}-\d{2}-\d{2}$/.test(parsed.date)) ? parsed.date : todayStr();
     el("compCount").value = 0; el("compList").innerHTML = ""; el("notes").value = ""; setThumb(pendingPhoto);
     el("acctRow").innerHTML = ""; setLock(false); openSheet_();
@@ -650,7 +658,7 @@
     el("editId").value = e.id; selectedCat = e.cat; setEntryMode(e.cat === "combustible" ? "combustible" : "despesa");
     el("amount").value = e.amount; el("ticket").value = e.ticket || ""; el("place").value = e.place || "";
     el("cif").value = e.cif || ""; setNumberMode(!!e.cif);
-    el("litres").value = (e.litres != null) ? e.litres : ""; el("fuelKm").value = "";
+    el("litres").value = (e.litres != null) ? e.litres : ""; el("fuelKm").value = ""; el("fuelPlate").value = e.plate || "";
     el("date").value = e.date; setCompanionsFromString(e.companions || ""); el("notes").value = e.notes || "";
     pendingPhoto = e.photo || null; setThumb(pendingPhoto);
     el("delBtn").style.display = (admin || e.userId === me.id) ? "block" : "none";
@@ -658,7 +666,7 @@
   }
 
   function setLock(locked) {
-    ["amount", "ticket", "date", "place", "compCount", "notes", "litres", "fuelKm"].forEach(function (id) { el(id).disabled = locked; });
+    ["amount", "ticket", "date", "place", "compCount", "notes", "litres", "fuelKm", "fuelPlate"].forEach(function (id) { el(id).disabled = locked; });
     el("compList").querySelectorAll(".compName").forEach(function (i) { i.disabled = locked; });
     document.querySelectorAll('input[name=cat]').forEach(function (r) { r.disabled = locked; });
     el("modeToggle").querySelectorAll(".mbtn").forEach(function (b) { b.disabled = locked; });
@@ -710,6 +718,7 @@
       notes: el("notes").value.trim(),
       litres: el("litres").value
     };
+    if (selectedCat === "combustible") payload.plate = el("fuelPlate").value.trim().toUpperCase();
     // foto nova per pujar (només si és dataURL, no una URL existent)
     if (pendingPhoto && pendingPhoto.indexOf("data:") === 0) payload.photoBase64 = pendingPhoto.split(",")[1];
 
