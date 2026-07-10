@@ -59,12 +59,29 @@ export default async (req) => {
       const b = await req.json();
       if (b.amount == null || isNaN(Number(b.amount))) return json({ error: 'Import no vàlid' }, 400);
 
-      // Detecció de duplicats (entre tots els usuaris): mateixa data + proveïdor + número.
-      // Si en troba un, es bloqueja el desat.
+      // Detecció de duplicats (entre tots els usuaris).
+      // Cas general: mateixa data + proveïdor + número de tiquet.
+      // Repostatges (combustible) SENSE número: es compara per data + proveïdor + MATRÍCULA
+      //   (hi ha proveïdors que no donen tiquet). Si tampoc hi ha matrícula, no es bloqueja.
       {
         const place = (b.place || '').trim();
         const num = (b.ticket_no || '').trim();
-        if (place || num) {
+        const isFuel = (b.cat === 'combustible');
+        const plate = (b.plate || '').trim().toUpperCase();
+        if (isFuel && !num) {
+          if (place && plate) {
+            const dups = await sql`select user_name, date, place, ticket_no from tickets
+              where date = ${b.date} and cat = 'combustible'
+              and lower(coalesce(place,'')) = lower(${place})
+              and coalesce(ticket_no,'') = ''
+              and upper(coalesce(plate,'')) = ${plate}
+              limit 1`;
+            if (dups.length) {
+              const d = dups[0];
+              return json({ duplicate: true, of: { user: d.user_name, date: d.date, place: d.place, ticket: d.ticket_no } }, 409);
+            }
+          }
+        } else if (place || num) {
           const dups = await sql`select user_name, date, place, ticket_no from tickets
             where date = ${b.date}
             and lower(coalesce(place,'')) = lower(${place})
