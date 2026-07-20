@@ -129,6 +129,7 @@
   .ticket.late{border:1.5px solid #d9433a}
   .bdsel{outline:2px solid var(--accent);outline-offset:1px;border-radius:8px}
   .latebadge{display:inline-block;background:#fce8e6;color:#c0271e;font-size:11px;font-weight:800;padding:2px 8px;border-radius:7px;margin-left:6px;vertical-align:middle}
+  .latenote{background:#fdeeec;color:#a3271e;border:1px solid #f2c6c0;border-radius:10px;padding:10px 12px;font-size:13px;margin-bottom:10px;line-height:1.4}
   .modetoggle{display:flex;gap:8px;margin-bottom:14px}
   .modetoggle .mbtn{flex:1;border:1.5px solid var(--line);background:var(--card);color:var(--muted);border-radius:11px;padding:11px;font-size:14px;font-weight:700;cursor:pointer}
   .modetoggle .mbtn[data-active="true"]{background:var(--ink);color:#f4f1ea;border-color:var(--ink)}
@@ -290,6 +291,7 @@
       <datalist id="namesList"></datalist>
       <div class="field"><label for="notes">Observacions</label><textarea id="notes" placeholder="Notes (opcional)"></textarea></div>
       <div id="acctRow"></div>
+      <div id="lateRow"></div>
       <div class="actions"><button type="button" class="btn-danger" id="delBtn" style="display:none">Elimina</button><button type="submit" class="btn-primary" id="saveBtn">Desa el registre</button></div>
     </div>
   </form>

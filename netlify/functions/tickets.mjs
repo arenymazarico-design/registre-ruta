@@ -32,6 +32,7 @@ function rowToClient(r) {
     companions: r.companions || '', notes: r.notes || '',
     litres: r.litres != null ? Number(r.litres) : null, km: r.km != null ? Number(r.km) : null,
     plate: r.plate || '',
+    lateMonth: r.late_month || '',
     photo: r.photo_url || null, accounted: !!r.accounted,
     createdAt: r.created_at ? new Date(r.created_at).getTime() : 0
   };
@@ -160,6 +161,14 @@ export default async (req) => {
       if (!b.id) return json({ error: 'Falta id' }, 400);
       const cur = (await sql`select * from tickets where id=${b.id}`)[0];
       if (!cur) return json({ error: 'No trobat' }, 404);
+
+      // Resoldre un tiquet fora de termini: on s'ha de comptar (només admin).
+      if (b.setLateMonth !== undefined) {
+        if (me.role !== 'admin') return json({ error: 'Només administradors' }, 403);
+        const v = (b.setLateMonth === 'date' || b.setLateMonth === 'entry') ? b.setLateMonth : '';
+        await sql`update tickets set late_month=${v} where id=${b.id}`;
+        return json({ ok: true, id: b.id, lateMonth: v });
+      }
 
       // Marcar/desmarcar com a validat (només admin).
       if (typeof b.setAccounted === 'boolean') {

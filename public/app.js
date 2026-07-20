@@ -10,7 +10,7 @@
   };
   var CAT_KEYS = Object.keys(CATS);
   var EXPENSE_KEYS = CAT_KEYS.filter(function (k) { return k !== "combustible"; });
-  var APP_VERSION = "2025-07-03 · total-filtrat";
+  var APP_VERSION = "2025-07-03 · termini-marge4";
 
   // ---------- Idioma (català per defecte / castellà) ----------
   var lang = localStorage.getItem("lang") || "ca";
@@ -205,9 +205,11 @@
 
   function isoDay(ms) { return new Date(ms).toISOString().slice(0, 10); }
   function daysBetween(a, b) { return Math.round((Date.parse(b) - Date.parse(a)) / 86400000); }
-  function isLateDate(dateStr) { return daysBetween(dateStr, todayStr()) > 15; }
-  function isLateEntry(e) { if (!e || !e.createdAt) return false; return daysBetween(e.date, isoDay(e.createdAt)) > 15; }
-  function effectiveMonth(e) { return (isLateEntry(e) && e.createdAt) ? ymOf(isoDay(e.createdAt)) : ymOf(e.date); }
+  function lateDeadline(dateStr) { var d = new Date(dateStr + "T00:00:00"); return new Date(d.getFullYear(), d.getMonth() + 1, 4).getTime(); }
+  function isLateDate(dateStr) { return new Date(todayStr() + "T00:00:00").getTime() > lateDeadline(dateStr); }
+  function isLateEntry(e) { if (!e || !e.createdAt) return false; return new Date(isoDay(e.createdAt) + "T00:00:00").getTime() > lateDeadline(e.date); }
+  function lateUnresolved(e) { return isLateEntry(e) && !e.lateMonth; }
+  function effectiveMonth(e) { return (isLateEntry(e) && e.lateMonth !== "date" && e.createdAt) ? ymOf(isoDay(e.createdAt)) : ymOf(e.date); }
   function visibleEntries() {
     var key = ym(view);
     var list = entries.filter(function (e) { return e.cat !== "combustible" && effectiveMonth(e) === key; });
@@ -332,7 +334,7 @@
         var extra = sub.length ? '<div class="extra">' + esc(sub.join("  ·  ")) + '</div>' : '';
         var whoTag = admin ? '<span class="who2">' + esc(e.user) + '</span>' : '';
         var acctTag = e.accounted ? '<span class="acctbadge">✓ validat</span>' : '';
-        var late = isLateEntry(e);
+        var late = lateUnresolved(e);
         var lateTag = late ? '<span class="latebadge">⚠ fora de termini</span>' : '';
         return '<div class="ticket' + (e.accounted ? ' acct' : '') + (late ? ' late' : '') + '" data-id="' + e.id + '"><div class="bar" style="background:' + c.color + '"></div>' +
           '<div class="body"><span class="cat" style="color:' + c.color + '">' + c.label + '</span>' + whoTag + acctTag + lateTag +
@@ -673,7 +675,7 @@
     el("fuelPlate").value = isFuel ? myActivePlate() : "";
     el("date").value = (parsed && parsed.date && /^\d{4}-\d{2}-\d{2}$/.test(parsed.date)) ? parsed.date : todayStr();
     el("compCount").value = 0; el("compList").innerHTML = ""; el("notes").value = ""; setThumb(pendingPhoto);
-    el("acctRow").innerHTML = ""; setLock(false); openSheet_();
+    el("acctRow").innerHTML = ""; el("lateRow").innerHTML = ""; setLock(false); openSheet_();
     pendingFuel = false;
   }
   function openSheet(id) {
@@ -686,7 +688,7 @@
     el("date").value = e.date; setCompanionsFromString(e.companions || ""); el("notes").value = e.notes || "";
     pendingPhoto = e.photo || null; setThumb(pendingPhoto);
     el("delBtn").style.display = (admin || e.userId === me.id) ? "block" : "none";
-    renderAcct(e); openSheet_();
+    renderAcct(e); renderLate(e); openSheet_();
   }
 
   function setLock(locked) {
@@ -697,6 +699,30 @@
     el("retakeBtn").style.display = locked ? "none" : "";
     el("saveBtn").style.display = locked ? "none" : "";
     if (locked) el("delBtn").style.display = "none";
+  }
+  function renderLate(e) {
+    var box = el("lateRow"); box.innerHTML = "";
+    if (!admin || !e || !isLateEntry(e)) return;
+    var inDate = (e.lateMonth === "date"), inEntry = (e.lateMonth === "entry");
+    var dateM = monthLabel(ymOf(e.date));
+    var entryM = e.createdAt ? monthLabel(ymOf(isoDay(e.createdAt))) : "";
+    var status = e.lateMonth
+      ? ("Assignat a <b>" + (inDate ? dateM + "</b> (mes de la data)" : entryM + "</b> (mes d'entrada)"))
+      : ("Ara compta a <b>" + entryM + "</b> (mes d'entrada)");
+    box.innerHTML =
+      '<div class="latenote">⚠ Tiquet fora de termini (correspon a un mes anterior ja tancat). ' + status + '.</div>' +
+      '<div class="actions" style="margin-bottom:10px">' +
+      '<button type="button" class="btn-ghost" id="lateDate"' + (inDate ? ' disabled' : '') + '>📅 Passar a ' + dateM + '</button>' +
+      '<button type="button" class="btn-ghost" id="lateEntry"' + (inEntry ? ' disabled' : '') + '>Deixar a ' + entryM + '</button></div>';
+    var bd = el("lateDate"); if (bd) bd.onclick = function () { setLateMonth(e.id, "date"); };
+    var be = el("lateEntry"); if (be) be.onclick = function () { setLateMonth(e.id, "entry"); };
+  }
+  async function setLateMonth(id, v) {
+    try {
+      await api("/api/tickets", "PUT", { id: id, setLateMonth: v });
+      await loadEntries(); closeSheet(); render();
+      toast(v === "date" ? "Passat al mes de la data del tiquet" : "Deixat al mes d'entrada");
+    } catch (e) { toast(e.message, { error: true }); }
   }
   function renderAcct(e) {
     var acct = el("acctRow");
@@ -763,7 +789,7 @@
       else if (res && res.emailed) okMsg = "Desat i enviat per correu";
       else okMsg = "Desat" + (res && res.emailReason ? " — correu no enviat: " + res.emailReason : "");
       toast(okMsg);
-      if (isLateDate(payload.date)) toast("⚠️ Aquest tiquet té una data de fa més de 15 dies. Quedarà marcat en vermell.", { error: true, ms: 7500 });
+      if (isLateDate(payload.date)) toast("⚠️ Aquest tiquet és fora de termini (correspon a un mes ja tancat). Quedarà marcat en vermell.", { error: true, ms: 7500 });
     } catch (e) {
       if (e && e.data && e.data.duplicate) {
         var of = e.data.of || {};
