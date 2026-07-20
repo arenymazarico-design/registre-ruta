@@ -9,3 +9,24 @@
 
 # Les rutes /api/* les declara cada funció amb `export const config = { path }`,
 # així que no calen redirects addicionals.
+
+# Evita que el navegador es quedi amb versions antigues de l'app (cache).
+[[headers]]
+  for = "/"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
+
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
+
+[[headers]]
+  for = "/app.js"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
+
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
