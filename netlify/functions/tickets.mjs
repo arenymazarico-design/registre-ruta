@@ -33,6 +33,7 @@ function rowToClient(r) {
     litres: r.litres != null ? Number(r.litres) : null, km: r.km != null ? Number(r.km) : null,
     plate: r.plate || '',
     lateMonth: r.late_month || '',
+    compFlag: !!r.comp_flag,
     photo: r.photo_url || null, accounted: !!r.accounted,
     createdAt: r.created_at ? new Date(r.created_at).getTime() : 0
   };
@@ -112,15 +113,15 @@ export default async (req) => {
         }
       }
 
-      // Acompanyants: no repetits dins del mateix tiquet, ni en tiquets diferents del mateix dia.
+      // Acompanyants: no repetits dins del mateix tiquet (bloqueja).
+      // En tiquets diferents del mateix dia: es desa igualment però marcat (compFlag) per validar.
+      let compFlag = false;
       if (b.cat === 'dietes' && b.companions) {
         const names = parseNames(b.companions);
         const seen = {};
         for (const n of names) { const k = n.toLowerCase(); if (seen[k]) return json({ companionSameDup: true, name: n }, 409); seen[k] = 1; }
         const clash = await companionClash(b.date, b.companions, null);
-        if (clash && !(b.allowCompanionDup && me.role === 'admin')) {
-          return json({ companionDup: true, name: clash.name, user: clash.user, date: b.date, canOverride: true }, 409);
-        }
+        if (clash) compFlag = true;
       }
 
       const id = uid();
@@ -130,9 +131,9 @@ export default async (req) => {
       const kmIn = (b.cat === 'combustible' && b.km !== '' && b.km != null && !isNaN(Number(b.km))) ? Number(b.km) : null;
       const au = (await sql`select active_plate from users where id=${me.uid}`)[0] || {};
       const plateIn = (b.plate !== undefined && b.plate !== null) ? String(b.plate).trim().toUpperCase() : (au.active_plate || '').trim().toUpperCase();
-      await sql`insert into tickets (id,user_id,user_name,cat,amount,ticket_no,place,cif,date,companions,notes,photo_url,litres,km,plate)
+      await sql`insert into tickets (id,user_id,user_name,cat,amount,ticket_no,place,cif,date,companions,notes,photo_url,litres,km,plate,comp_flag)
         values (${id},${me.uid},${me.name},${b.cat},${Number(b.amount)},${b.ticket_no || ''},${b.place || ''},${b.cif || ''},
-        ${b.date},${b.cat === 'dietes' ? (b.companions || '') : ''},${b.notes || ''},${photoUrl},${litresIn},${kmIn},${plateIn})`;
+        ${b.date},${b.cat === 'dietes' ? (b.companions || '') : ''},${b.notes || ''},${photoUrl},${litresIn},${kmIn},${plateIn},${compFlag})`;
 
       // enviament automàtic (amb motiu si no s'envia)
       const cfg = (await sql`select email from app_config where id=1`)[0] || {};
@@ -167,6 +168,13 @@ export default async (req) => {
       const cur = (await sql`select * from tickets where id=${b.id}`)[0];
       if (!cur) return json({ error: 'No trobat' }, 404);
 
+      // Validar un acompanyant repetit (només admin): treu la marca.
+      if (b.validateCompanion) {
+        if (me.role !== 'admin') return json({ error: 'Només administradors' }, 403);
+        await sql`update tickets set comp_flag=false where id=${b.id}`;
+        return json({ ok: true, id: b.id });
+      }
+
       // Resoldre un tiquet fora de termini: on s'ha de comptar (només admin).
       if (b.setLateMonth !== undefined) {
         if (me.role !== 'admin') return json({ error: 'Només administradors' }, 403);
@@ -185,14 +193,13 @@ export default async (req) => {
       // Edició normal: bloquejada si està comptabilitzat.
       if (cur.accounted) return json({ error: 'Tiquet comptabilitzat: bloquejat' }, 409);
       if (me.role !== 'admin' && cur.user_id !== me.uid) return json({ error: 'Sense permís' }, 403);
+      let compFlagUp = false;
       if (b.cat === 'dietes' && b.companions) {
         const names = parseNames(b.companions);
         const seen = {};
         for (const n of names) { const k = n.toLowerCase(); if (seen[k]) return json({ companionSameDup: true, name: n }, 409); seen[k] = 1; }
         const clash = await companionClash(b.date, b.companions, b.id);
-        if (clash && !(b.allowCompanionDup && me.role === 'admin')) {
-          return json({ companionDup: true, name: clash.name, user: clash.user, date: b.date, canOverride: true }, 409);
-        }
+        if (clash) compFlagUp = true;
       }
       let photoUrl = cur.photo_url;
       if (b.photoBase64) { await photos().set(b.id, b.photoBase64); photoUrl = '/api/photo?id=' + b.id; }
@@ -201,7 +208,7 @@ export default async (req) => {
       const plateUp = (b.plate !== undefined && b.plate !== null) ? String(b.plate).trim().toUpperCase() : (cur.plate || '');
       await sql`update tickets set cat=${b.cat}, amount=${Number(b.amount)}, ticket_no=${b.ticket_no || ''},
         place=${b.place || ''}, cif=${b.cif || ''}, date=${b.date}, companions=${b.cat === 'dietes' ? (b.companions || '') : ''},
-        notes=${b.notes || ''}, photo_url=${photoUrl}, litres=${litresUp}, km=${kmUp}, plate=${plateUp} where id=${b.id}`;
+        notes=${b.notes || ''}, photo_url=${photoUrl}, litres=${litresUp}, km=${kmUp}, plate=${plateUp}, comp_flag=${compFlagUp} where id=${b.id}`;
       return json({ ok: true, id: b.id });
     }
 
