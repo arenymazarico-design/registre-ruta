@@ -7,6 +7,23 @@ const CATS = { dietes: 'Dietes', gastos: 'Gastos', bascules: 'Bàscules', peatge
 
 function photos() { return getStore('ticket-photos'); }
 
+function parseNames(s) { return String(s || '').split(',').map(function (x) { return x.trim(); }).filter(Boolean); }
+// Retorna el nom d'un acompanyant que ja aparegui en un altre tiquet del mateix dia, o null.
+async function companionClash(date, companionsStr, excludeId) {
+  const names = parseNames(companionsStr);
+  if (!names.length) return null;
+  const lower = {}; names.forEach(function (n) { lower[n.toLowerCase()] = n; });
+  const rows = excludeId
+    ? await sql`select user_name, companions from tickets where date=${date} and coalesce(companions,'')<>'' and id<>${excludeId}`
+    : await sql`select user_name, companions from tickets where date=${date} and coalesce(companions,'')<>''`;
+  for (const r of rows) {
+    for (const nm of parseNames(r.companions)) {
+      if (lower[nm.toLowerCase()]) return { name: lower[nm.toLowerCase()], user: r.user_name };
+    }
+  }
+  return null;
+}
+
 function rowToClient(r) {
   return {
     id: r.id, userId: r.user_id, user: r.user_name, cat: r.cat,
@@ -94,6 +111,12 @@ export default async (req) => {
         }
       }
 
+      // Un acompanyant no pot estar repetit en cap tiquet del mateix dia.
+      if (b.cat === 'dietes' && b.companions) {
+        const clash = await companionClash(b.date, b.companions, null);
+        if (clash) return json({ companionDup: true, name: clash.name, user: clash.user, date: b.date }, 409);
+      }
+
       const id = uid();
       let photoUrl = null;
       if (b.photoBase64) { await photos().set(id, b.photoBase64); photoUrl = '/api/photo?id=' + id; }
@@ -148,6 +171,10 @@ export default async (req) => {
       // Edició normal: bloquejada si està comptabilitzat.
       if (cur.accounted) return json({ error: 'Tiquet comptabilitzat: bloquejat' }, 409);
       if (me.role !== 'admin' && cur.user_id !== me.uid) return json({ error: 'Sense permís' }, 403);
+      if (b.cat === 'dietes' && b.companions) {
+        const clash = await companionClash(b.date, b.companions, b.id);
+        if (clash) return json({ companionDup: true, name: clash.name, user: clash.user, date: b.date }, 409);
+      }
       let photoUrl = cur.photo_url;
       if (b.photoBase64) { await photos().set(b.id, b.photoBase64); photoUrl = '/api/photo?id=' + b.id; }
       const litresUp = (b.cat === 'combustible' && b.litres !== '' && b.litres != null && !isNaN(Number(b.litres))) ? Number(b.litres) : null;

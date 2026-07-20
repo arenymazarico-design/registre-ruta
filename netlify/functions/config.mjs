@@ -8,14 +8,15 @@ export default async (req) => {
     if (!me) return json({ error: 'No autenticat' }, 401);
 
     if (req.method === 'GET') {
-      const c = (await sql`select email, color, logo, cif, names from app_config where id=1`)[0] || {};
-      return json({ email: c.email || '', color: c.color || '', logo: c.logo || '', cif: c.cif || '', names: c.names || '' });
+      const c = (await sql`select email, color, logo, cif, names, menu_max from app_config where id=1`)[0] || {};
+      return json({ email: c.email || '', color: c.color || '', logo: c.logo || '', cif: c.cif || '', names: c.names || '', menuMax: c.menu_max != null ? Number(c.menu_max) : 0 });
     }
 
     if (req.method === 'POST') {
       if (me.role !== 'admin') return json({ error: 'Només administradors' }, 403);
-      const { email, color, logo, cif, names } = await req.json();
-      await sql`update app_config set email=${email || ''}, color=${color || ''}, logo=${logo || ''}, cif=${cif || ''}, names=${names || ''} where id=1`;
+      const { email, color, logo, cif, names, menuMax } = await req.json();
+      const mx = (menuMax != null && !isNaN(Number(menuMax))) ? Number(menuMax) : 0;
+      await sql`update app_config set email=${email || ''}, color=${color || ''}, logo=${logo || ''}, cif=${cif || ''}, names=${names || ''}, menu_max=${mx} where id=1`;
       return json({ ok: true });
     }
 

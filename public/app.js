@@ -10,7 +10,7 @@
   };
   var CAT_KEYS = Object.keys(CATS);
   var EXPENSE_KEYS = CAT_KEYS.filter(function (k) { return k !== "combustible"; });
-  var APP_VERSION = "2025-07-03 · dup-matricula";
+  var APP_VERSION = "2025-07-03 · total-filtrat";
 
   // ---------- Idioma (català per defecte / castellà) ----------
   var lang = localStorage.getItem("lang") || "ca";
@@ -95,6 +95,7 @@
     "Cap vehicle actiu": "Sin vehículo activo", "Toca una matrícula per activar-la. 🏠 = habitual.": "Toca una matrícula para activarla. 🏠 = habitual.",
     "Vehicle habitual": "Vehículo habitual",
     "Despesa": "Gasto", "Té vehicle d'empresa": "Tiene vehículo de empresa", "⬇︎ Descarregar plantilla": "⬇︎ Descargar plantilla",
+    "⚠ fora de termini": "⚠ fuera de plazo", "Import màxim per menú/dieta (€)": "Importe máximo por menú/dieta (€)",
     "Posa la matrícula": "Pon la matrícula", "Totes les matrícules": "Todas las matrículas", "(sense matrícula)": "(sin matrícula)", "Matrícula": "Matrícula"
   };
   var translating = false;
@@ -186,6 +187,7 @@
   async function loadRoster() { try { var r = await api("/api/users"); roster = r.users || []; } catch (e) { roster = []; } }
   function normalizeCfg(c) {
     cfg.email = c.email || ""; cfg.color = c.color || ""; cfg.logo = c.logo || ""; cfg.cif = c.cif || "";
+    cfg.menuMax = (c.menuMax != null && !isNaN(Number(c.menuMax))) ? Number(c.menuMax) : 0;
     var names = [];
     if (c.names) { try { names = JSON.parse(c.names); } catch (e) { names = String(c.names).split(/[\n,;]+/); } }
     cfg.names = (names || []).map(function (x) { return String(x).trim(); }).filter(Boolean);
@@ -201,9 +203,14 @@
     dl.innerHTML = allNames().map(function (n) { return '<option value="' + esc(n) + '"></option>'; }).join("");
   }
 
+  function isoDay(ms) { return new Date(ms).toISOString().slice(0, 10); }
+  function daysBetween(a, b) { return Math.round((Date.parse(b) - Date.parse(a)) / 86400000); }
+  function isLateDate(dateStr) { return daysBetween(dateStr, todayStr()) > 15; }
+  function isLateEntry(e) { if (!e || !e.createdAt) return false; return daysBetween(e.date, isoDay(e.createdAt)) > 15; }
+  function effectiveMonth(e) { return (isLateEntry(e) && e.createdAt) ? ymOf(isoDay(e.createdAt)) : ymOf(e.date); }
   function visibleEntries() {
     var key = ym(view);
-    var list = entries.filter(function (e) { return e.cat !== "combustible" && ymOf(e.date) === key; });
+    var list = entries.filter(function (e) { return e.cat !== "combustible" && effectiveMonth(e) === key; });
     if (!admin) list = list.filter(function (e) { return e.userId === me.id; });
     return list;
   }
@@ -263,12 +270,24 @@
     } catch (e) { toast(e.message); }
   }
 
+  function applyFilters(list) {
+    var l = list.slice();
+    if (filter !== "tots") l = l.filter(function (e) { return e.cat === filter; });
+    if (admin && userFilter !== "tots") l = l.filter(function (e) { return e.userId === userFilter; });
+    return l;
+  }
   function renderApp() {
     var mes = visibleEntries();
-    var total = mes.reduce(function (s, e) { return s + e.amount; }, 0);
+    var mesUser = (admin && userFilter !== "tots") ? mes.filter(function (e) { return e.userId === userFilter; }) : mes;
+    var shown = applyFilters(mes);
+    var total = shown.reduce(function (s, e) { return s + e.amount; }, 0);
     var sums = {}; EXPENSE_KEYS.forEach(function (k) { sums[k] = 0; });
-    mes.forEach(function (e) { if (sums[e.cat] != null) sums[e.cat] += e.amount; });
-    var bd = EXPENSE_KEYS.map(function (k) { return '<div class="bd"><div class="n"><span class="dot" style="background:' + CATS[k].color + '"></span>' + CATS[k].label + '</div><div class="v">' + eur(sums[k]) + '</div></div>'; }).join("");
+    mesUser.forEach(function (e) { if (sums[e.cat] != null) sums[e.cat] += e.amount; });
+    var bd = EXPENSE_KEYS.map(function (k) { return '<div class="bd' + (filter === k ? ' bdsel' : '') + '"><div class="n"><span class="dot" style="background:' + CATS[k].color + '"></span>' + CATS[k].label + '</div><div class="v">' + eur(sums[k]) + '</div></div>'; }).join("");
+    var fparts = [];
+    if (filter !== "tots") fparts.push(CATS[filter].label);
+    if (admin && userFilter !== "tots") { var uu = roster.filter(function (x) { return x.id === userFilter; })[0]; if (uu) fparts.push(uu.name); }
+    var totalLbl = fparts.length ? ("Total filtrat: " + fparts.join(" · ")) : (admin ? "Total de tots els usuaris" : "El meu total del mes");
 
     el("root").innerHTML =
       '<div class="wrap"><header>' +
@@ -277,7 +296,7 @@
       '<div style="display:flex;flex-direction:column"><h1 style="text-transform:none;letter-spacing:.01em">PLUgastos</h1><span class="sub">' + (admin ? 'Panell d\'administrador' : 'despeses de ruta') + '</span></div></div>' +
       '<div class="who">' + (admin ? '<span class="adminbadge">ADMIN</span>' : '') + '<button class="avatar" id="avatarBtn">' + esc(initial(me.name)) + '</button></div></div>' +
       '<div class="monthbar"><button id="prevM">‹</button><div class="m">' + MONTHS[view.getMonth()] + ' ' + view.getFullYear() + '</div><button id="nextM">›</button></div>' +
-      '<div class="total"><div class="big">' + eur(total) + '</div><div class="lbl">' + (admin ? 'Total de tots els usuaris' : 'El meu total del mes') + '</div></div>' +
+      '<div class="total"><div class="big">' + eur(total) + '</div><div class="lbl">' + totalLbl + '</div></div>' +
       '<div class="breakdown">' + bd + '</div></header>' + renderToolbar() + '<main id="list"></main></div>' +
       '<div class="fabbar"><button class="fab" id="camBtn"><span class="cam">📷</span> Fer foto del tiquet</button>' + (admin ? '<button class="nolink" id="manualBtn">afegir sense foto</button>' : '') + '</div>';
 
@@ -313,8 +332,10 @@
         var extra = sub.length ? '<div class="extra">' + esc(sub.join("  ·  ")) + '</div>' : '';
         var whoTag = admin ? '<span class="who2">' + esc(e.user) + '</span>' : '';
         var acctTag = e.accounted ? '<span class="acctbadge">✓ validat</span>' : '';
-        return '<div class="ticket' + (e.accounted ? ' acct' : '') + '" data-id="' + e.id + '"><div class="bar" style="background:' + c.color + '"></div>' +
-          '<div class="body"><span class="cat" style="color:' + c.color + '">' + c.label + '</span>' + whoTag + acctTag +
+        var late = isLateEntry(e);
+        var lateTag = late ? '<span class="latebadge">⚠ fora de termini</span>' : '';
+        return '<div class="ticket' + (e.accounted ? ' acct' : '') + (late ? ' late' : '') + '" data-id="' + e.id + '"><div class="bar" style="background:' + c.color + '"></div>' +
+          '<div class="body"><span class="cat" style="color:' + c.color + '">' + c.label + '</span>' + whoTag + acctTag + lateTag +
           '<div class="concept">' + esc(e.place || c.label) + '</div>' + extra + '</div>' +
           '<div class="right"><span class="amt">' + eur(e.amount) + '</span>' + (e.photo ? '<span class="clip">📎</span>' : '') + '</div></div>';
       }).join("");
@@ -489,6 +510,8 @@
       '<p style="font-size:12px;color:var(--muted);margin:-4px 0 12px">On s\'enviaran les fotos dels tiquets en guardar-los.</p>' +
       '<div class="field"><label for="cCif">CIF de l\'empresa</label><input id="cCif" type="text" placeholder="Ex. B12345678" value="' + esc(cfg.cif) + '"></div>' +
       '<p style="font-size:12px;color:var(--muted);margin:-4px 0 12px">Si en llegir un document hi ha CIF, es tractarà com a factura i s\'agafarà el número de factura.</p>' +
+      '<div class="field"><label for="cMenuMax">Import màxim per menú/dieta (€)</label><input id="cMenuMax" type="number" inputmode="decimal" step="0.01" min="0" placeholder="Ex. 12" value="' + (cfg.menuMax ? esc(String(cfg.menuMax)) : "") + '"></div>' +
+      '<p style="font-size:12px;color:var(--muted);margin:-4px 0 12px">En generar l\'Excel de consulta, les dietes que superin aquest import es limitaran a aquest valor. Deixa-ho a 0 per no aplicar cap límit.</p>' +
       '<label style="display:block;font-size:12px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--muted);margin-bottom:6px">Color de l\'app</label>' +
       '<div class="swatches">' + swatches + '<input id="cColor" type="color" value="' + esc(cfgColorTmp) + '" style="width:40px;height:34px;border:1px solid var(--line);border-radius:8px;background:none;cursor:pointer;padding:2px"></div>' +
       '<label style="display:block;font-size:12px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--muted);margin:2px 0 6px">Logo</label>' +
@@ -535,9 +558,10 @@
   async function saveCfg() {
     cfg.email = el("cEmail").value.trim(); cfg.color = cfgColorTmp || ""; cfg.logo = cfgLogoTmp || "";
     cfg.cif = el("cCif").value.trim();
+    var mm = parseFloat(el("cMenuMax").value); cfg.menuMax = (!isNaN(mm) && mm > 0) ? mm : 0;
     cfg.names = el("cNames").value.split("\n").map(function (x) { return x.trim(); }).filter(Boolean);
     try {
-      await api("/api/config", "POST", { email: cfg.email, color: cfg.color, logo: cfg.logo, cif: cfg.cif, names: JSON.stringify(cfg.names) });
+      await api("/api/config", "POST", { email: cfg.email, color: cfg.color, logo: cfg.logo, cif: cfg.cif, names: JSON.stringify(cfg.names), menuMax: cfg.menuMax });
       applyTheme(); fillNamesDatalist(); closeCfg(); render(); toast("Configuració desada");
     } catch (e) { toast(e.message); }
   }
@@ -739,10 +763,13 @@
       else if (res && res.emailed) okMsg = "Desat i enviat per correu";
       else okMsg = "Desat" + (res && res.emailReason ? " — correu no enviat: " + res.emailReason : "");
       toast(okMsg);
+      if (isLateDate(payload.date)) toast("⚠️ Aquest tiquet té una data de fa més de 15 dies. Quedarà marcat en vermell.", { error: true, ms: 7500 });
     } catch (e) {
       if (e && e.data && e.data.duplicate) {
         var of = e.data.of || {};
         toast("Tiquet duplicat: ja registrat" + (of.user ? " per " + of.user : "") + (of.date ? " el " + String(of.date).slice(0, 10) : "") + ". No es desa.", { error: true, cross: true, ms: 7500 });
+      } else if (e && e.data && e.data.companionDup) {
+        toast("L'acompanyant \"" + e.data.name + "\" ja consta en un altre tiquet del mateix dia" + (e.data.user ? " (" + e.data.user + ")" : "") + ". No es desa.", { error: true, cross: true, ms: 7500 });
       } else toast(e.message, { error: true });
     }
     unlockBtn();
@@ -849,12 +876,13 @@
     var rows = list.map(function (e) {
       var factura = e.cif ? (e.ticket || "") : "";
       var tiquet = e.cif ? "" : (e.ticket || "");
-      return [e.date, e.user, factura, tiquet, CATS[e.cat] ? CATS[e.cat].label : e.cat, e.place || "", Number(e.amount), e.companions || "", e.notes || ""];
+      return [e.date, e.user, factura, tiquet, CATS[e.cat] ? CATS[e.cat].label : e.cat, e.place || "", exportAmount(e), e.companions || "", e.notes || ""];
     });
     return { header: header, rows: rows };
   }
-  function rowAllExp(e) { var f = e.cif ? (e.ticket || "") : "", t = e.cif ? "" : (e.ticket || ""); return [e.date, e.user, f, t, (CATS[e.cat] ? CATS[e.cat].label : e.cat), e.place || "", Number(e.amount), e.companions || "", e.notes || ""]; }
-  function rowUserExp(e) { var f = e.cif ? (e.ticket || "") : "", t = e.cif ? "" : (e.ticket || ""); return [e.date, f, t, (CATS[e.cat] ? CATS[e.cat].label : e.cat), e.place || "", Number(e.amount), e.companions || "", e.notes || ""]; }
+  function exportAmount(e) { return (e.cat === "dietes" && cfg.menuMax > 0 && Number(e.amount) > cfg.menuMax) ? cfg.menuMax : Number(e.amount); }
+  function rowAllExp(e) { var f = e.cif ? (e.ticket || "") : "", t = e.cif ? "" : (e.ticket || ""); return [e.date, e.user, f, t, (CATS[e.cat] ? CATS[e.cat].label : e.cat), e.place || "", exportAmount(e), e.companions || "", e.notes || ""]; }
+  function rowUserExp(e) { var f = e.cif ? (e.ticket || "") : "", t = e.cif ? "" : (e.ticket || ""); return [e.date, f, t, (CATS[e.cat] ? CATS[e.cat].label : e.cat), e.place || "", exportAmount(e), e.companions || "", e.notes || ""]; }
   function dlBlob(blob, filename) { var a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = filename; document.body.appendChild(a); a.click(); a.remove(); }
   function loadImageSize(dataUrl) {
     return new Promise(function (res) {
