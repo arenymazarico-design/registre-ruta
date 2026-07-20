@@ -10,7 +10,7 @@
   };
   var CAT_KEYS = Object.keys(CATS);
   var EXPENSE_KEYS = CAT_KEYS.filter(function (k) { return k !== "combustible"; });
-  var APP_VERSION = "2025-07-03 · acomp-marca-validar";
+  var APP_VERSION = "2025-07-03 · menu-mitjana";
 
   // ---------- Idioma (català per defecte / castellà) ----------
   var lang = localStorage.getItem("lang") || "ca";
@@ -513,8 +513,8 @@
       '<p style="font-size:12px;color:var(--muted);margin:-4px 0 12px">On s\'enviaran les fotos dels tiquets en guardar-los.</p>' +
       '<div class="field"><label for="cCif">CIF de l\'empresa</label><input id="cCif" type="text" placeholder="Ex. B12345678" value="' + esc(cfg.cif) + '"></div>' +
       '<p style="font-size:12px;color:var(--muted);margin:-4px 0 12px">Si en llegir un document hi ha CIF, es tractarà com a factura i s\'agafarà el número de factura.</p>' +
-      '<div class="field"><label for="cMenuMax">Import màxim per menú/dieta (€)</label><input id="cMenuMax" type="number" inputmode="decimal" step="0.01" min="0" placeholder="Ex. 12" value="' + (cfg.menuMax ? esc(String(cfg.menuMax)) : "") + '"></div>' +
-      '<p style="font-size:12px;color:var(--muted);margin:-4px 0 12px">En generar l\'Excel de consulta, les dietes que superin aquest import es limitaran a aquest valor. Deixa-ho a 0 per no aplicar cap límit.</p>' +
+      '<div class="field"><label for="cMenuMax">Import màxim per persona i menú (€)</label><input id="cMenuMax" type="number" inputmode="decimal" step="0.01" min="0" placeholder="Ex. 12" value="' + (cfg.menuMax ? esc(String(cfg.menuMax)) : "") + '"></div>' +
+      '<p style="font-size:12px;color:var(--muted);margin:-4px 0 12px">A l\'Excel de consulta, per a cada dieta es divideix l\'import entre els acompanyants + la persona que l\'entra; si la mitjana per persona supera aquest import, la fila es marca en vermell. No canvia cap import. Deixa-ho a 0 per no comprovar res.</p>' +
       '<label style="display:block;font-size:12px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--muted);margin-bottom:6px">Color de l\'app</label>' +
       '<div class="swatches">' + swatches + '<input id="cColor" type="color" value="' + esc(cfgColorTmp) + '" style="width:40px;height:34px;border:1px solid var(--line);border-radius:8px;background:none;cursor:pointer;padding:2px"></div>' +
       '<label style="display:block;font-size:12px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--muted);margin:2px 0 6px">Logo</label>' +
@@ -920,13 +920,15 @@
     var rows = list.map(function (e) {
       var factura = e.cif ? (e.ticket || "") : "";
       var tiquet = e.cif ? "" : (e.ticket || "");
-      return [e.date, e.user, factura, tiquet, CATS[e.cat] ? CATS[e.cat].label : e.cat, e.place || "", exportAmount(e), e.companions || "", e.notes || ""];
+      return [e.date, e.user, factura, tiquet, CATS[e.cat] ? CATS[e.cat].label : e.cat, e.place || "", Number(e.amount), e.companions || "", e.notes || ""];
     });
     return { header: header, rows: rows };
   }
-  function exportAmount(e) { return (e.cat === "dietes" && cfg.menuMax > 0 && Number(e.amount) > cfg.menuMax) ? cfg.menuMax : Number(e.amount); }
-  function rowAllExp(e) { var f = e.cif ? (e.ticket || "") : "", t = e.cif ? "" : (e.ticket || ""); return [e.date, e.user, f, t, (CATS[e.cat] ? CATS[e.cat].label : e.cat), e.place || "", exportAmount(e), e.companions || "", e.notes || ""]; }
-  function rowUserExp(e) { var f = e.cif ? (e.ticket || "") : "", t = e.cif ? "" : (e.ticket || ""); return [e.date, f, t, (CATS[e.cat] ? CATS[e.cat].label : e.cat), e.place || "", exportAmount(e), e.companions || "", e.notes || ""]; }
+  function companionsCount(s) { return String(s || "").split(",").map(function (x) { return x.trim(); }).filter(Boolean).length; }
+  function dietaAvg(e) { var people = companionsCount(e.companions) + 1; return people > 0 ? Number(e.amount) / people : Number(e.amount); }
+  function dietaOverLimit(e) { return e.cat === "dietes" && cfg.menuMax > 0 && dietaAvg(e) > cfg.menuMax + 1e-9; }
+  function rowAllExp(e) { var f = e.cif ? (e.ticket || "") : "", t = e.cif ? "" : (e.ticket || ""); return [e.date, e.user, f, t, (CATS[e.cat] ? CATS[e.cat].label : e.cat), e.place || "", Number(e.amount), e.companions || "", e.notes || ""]; }
+  function rowUserExp(e) { var f = e.cif ? (e.ticket || "") : "", t = e.cif ? "" : (e.ticket || ""); return [e.date, f, t, (CATS[e.cat] ? CATS[e.cat].label : e.cat), e.place || "", Number(e.amount), e.companions || "", e.notes || ""]; }
   function dlBlob(blob, filename) { var a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = filename; document.body.appendChild(a); a.click(); a.remove(); }
   function loadImageSize(dataUrl) {
     return new Promise(function (res) {
@@ -988,11 +990,17 @@
     values.forEach(function (v, ci) { var c = row.getCell(ci + 1); c.value = v; c.border = ctx.borderAll; c.alignment = { vertical: "middle", wrapText: (ci + 1 === header.length) }; if (euroCol && ci + 1 === euroCol) { c.numFmt = '#,##0.00" €"'; c.alignment = { horizontal: "right" }; } });
     return row;
   }
-  function xlsxFlatSheet(ctx, name, header, widths, rows, euroCol, title, withLogo, addTotal) {
+  function xlsxFlatSheet(ctx, name, header, widths, rows, euroCol, title, withLogo, addTotal, rowFlags) {
     var ws = ctx.wb.addWorksheet(name);
     ws.columns = widths.map(function (w) { return { width: w }; });
     var hr = xlsxTop(ws, ctx, header, title, withLogo);
-    rows.forEach(function (r, ri) { xlsxRow(ws, ctx, hr + 1 + ri, r, header, euroCol); });
+    rows.forEach(function (r, ri) {
+      var row = xlsxRow(ws, ctx, hr + 1 + ri, r, header, euroCol);
+      if (rowFlags && rowFlags[ri]) {
+        for (var ci = 1; ci <= header.length; ci++) { row.getCell(ci).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFCE4E2" } }; }
+        if (euroCol) { var ec = row.getCell(euroCol); ec.font = { bold: true, color: { argb: "FFC0271E" } }; }
+      }
+    });
     if (addTotal && euroCol) {
       var total = rows.reduce(function (s, r) { return s + (Number(r[euroCol - 1]) || 0); }, 0);
       var tr = ws.getRow(hr + 1 + rows.length);
@@ -1029,14 +1037,14 @@
   async function buildConsultaXlsx(list) {
     var ctx = await xlsxCtx();
     var headerAll = ["Data", "Usuari", "Número de factura", "Número tiquet", "Tipus de gasto", "Restaurant/Proveïdor", "Import", "Acompanyants", "Observacions"];
-    xlsxFlatSheet(ctx, "Consulta", headerAll, [13, 24, 18, 16, 15, 34, 13, 28, 40], list.map(rowAllExp), 7, null, false, true);
+    xlsxFlatSheet(ctx, "Consulta", headerAll, [13, 24, 18, 16, 15, 34, 13, 28, 40], list.map(rowAllExp), 7, null, false, true, list.map(dietaOverLimit));
     var byUser = {}, order = [];
     list.forEach(function (e) { if (!byUser[e.userId]) { byUser[e.userId] = []; order.push(e.userId); } byUser[e.userId].push(e); });
     var headerU = ["Data", "Número de factura", "Número tiquet", "Tipus de gasto", "Restaurant/Proveïdor", "Import", "Acompanyants", "Observacions"];
     var used = { "consulta": 1 };
     order.forEach(function (uid) {
       var nm = byUser[uid][0].user || "Usuari";
-      xlsxFlatSheet(ctx, safeSheet(nm, used), headerU, [13, 18, 16, 15, 34, 13, 28, 40], byUser[uid].map(rowUserExp), 6, "Despeses\n" + nm, true, true);
+      xlsxFlatSheet(ctx, safeSheet(nm, used), headerU, [13, 18, 16, 15, 34, 13, 28, 40], byUser[uid].map(rowUserExp), 6, "Despeses\n" + nm, true, true, byUser[uid].map(dietaOverLimit));
     });
     var buf = await ctx.wb.xlsx.writeBuffer();
     dlBlob(new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), "consulta.xlsx");
