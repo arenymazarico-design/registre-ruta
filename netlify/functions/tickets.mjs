@@ -112,10 +112,15 @@ export default async (req) => {
         }
       }
 
-      // Un acompanyant no pot estar repetit en cap tiquet del mateix dia.
+      // Acompanyants: no repetits dins del mateix tiquet, ni en tiquets diferents del mateix dia.
       if (b.cat === 'dietes' && b.companions) {
+        const names = parseNames(b.companions);
+        const seen = {};
+        for (const n of names) { const k = n.toLowerCase(); if (seen[k]) return json({ companionSameDup: true, name: n }, 409); seen[k] = 1; }
         const clash = await companionClash(b.date, b.companions, null);
-        if (clash) return json({ companionDup: true, name: clash.name, user: clash.user, date: b.date }, 409);
+        if (clash && !(b.allowCompanionDup && me.role === 'admin')) {
+          return json({ companionDup: true, name: clash.name, user: clash.user, date: b.date, canOverride: true }, 409);
+        }
       }
 
       const id = uid();
@@ -181,8 +186,13 @@ export default async (req) => {
       if (cur.accounted) return json({ error: 'Tiquet comptabilitzat: bloquejat' }, 409);
       if (me.role !== 'admin' && cur.user_id !== me.uid) return json({ error: 'Sense permís' }, 403);
       if (b.cat === 'dietes' && b.companions) {
+        const names = parseNames(b.companions);
+        const seen = {};
+        for (const n of names) { const k = n.toLowerCase(); if (seen[k]) return json({ companionSameDup: true, name: n }, 409); seen[k] = 1; }
         const clash = await companionClash(b.date, b.companions, b.id);
-        if (clash) return json({ companionDup: true, name: clash.name, user: clash.user, date: b.date }, 409);
+        if (clash && !(b.allowCompanionDup && me.role === 'admin')) {
+          return json({ companionDup: true, name: clash.name, user: clash.user, date: b.date, canOverride: true }, 409);
+        }
       }
       let photoUrl = cur.photo_url;
       if (b.photoBase64) { await photos().set(b.id, b.photoBase64); photoUrl = '/api/photo?id=' + b.id; }

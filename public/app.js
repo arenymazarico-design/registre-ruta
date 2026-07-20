@@ -10,7 +10,7 @@
   };
   var CAT_KEYS = Object.keys(CATS);
   var EXPENSE_KEYS = CAT_KEYS.filter(function (k) { return k !== "combustible"; });
-  var APP_VERSION = "2025-07-03 · termini-marge4";
+  var APP_VERSION = "2025-07-03 · acomp-validar";
 
   // ---------- Idioma (català per defecte / castellà) ----------
   var lang = localStorage.getItem("lang") || "ca";
@@ -774,29 +774,37 @@
 
     function unlockBtn() { saving = false; el("saveBtn").disabled = false; el("saveBtn").textContent = "Desa el registre"; }
     saving = true; el("saveBtn").disabled = true; el("saveBtn").textContent = "Desant…";
-    try {
-      var res;
-      if (id) { payload.id = id; res = await api("/api/tickets", "PUT", payload); }
-      else res = await api("/api/tickets", "POST", payload);
+    async function saveOnce() { if (id) { payload.id = id; return await api("/api/tickets", "PUT", payload); } return await api("/api/tickets", "POST", payload); }
+    async function postSave(res) {
       await loadEntries();
       if (selectedCat === "combustible") {
         var fkm = el("fuelKm").value;
         if (fkm !== "" && !isNaN(Number(fkm))) { try { await api("/api/readings", "POST", { km: Number(fkm), date: payload.date }); await loadReadings(); } catch (e) { } }
       }
-      pendingPhoto = null; closeSheet(); render(); if (el("kmSheet").getAttribute("data-open")==="true") renderKm();
-      var okMsg;
-      if (id) okMsg = "Registre actualitzat";
-      else if (res && res.emailed) okMsg = "Desat i enviat per correu";
-      else okMsg = "Desat" + (res && res.emailReason ? " — correu no enviat: " + res.emailReason : "");
+      pendingPhoto = null; closeSheet(); render(); if (el("kmSheet").getAttribute("data-open") === "true") renderKm();
+      var okMsg = id ? "Registre actualitzat" : (res && res.emailed ? "Desat i enviat per correu" : "Desat" + (res && res.emailReason ? " — correu no enviat: " + res.emailReason : ""));
       toast(okMsg);
       if (isLateDate(payload.date)) toast("⚠️ Aquest tiquet és fora de termini (correspon a un mes ja tancat). Quedarà marcat en vermell.", { error: true, ms: 7500 });
-    } catch (e) {
+    }
+    function showErr(e) {
       if (e && e.data && e.data.duplicate) {
         var of = e.data.of || {};
         toast("Tiquet duplicat: ja registrat" + (of.user ? " per " + of.user : "") + (of.date ? " el " + String(of.date).slice(0, 10) : "") + ". No es desa.", { error: true, cross: true, ms: 7500 });
+      } else if (e && e.data && e.data.companionSameDup) {
+        toast("Has posat l'acompanyant \"" + e.data.name + "\" dues vegades en aquest mateix tiquet. Treu-ne un.", { error: true, cross: true, ms: 7000 });
       } else if (e && e.data && e.data.companionDup) {
-        toast("L'acompanyant \"" + e.data.name + "\" ja consta en un altre tiquet del mateix dia" + (e.data.user ? " (" + e.data.user + ")" : "") + ". No es desa.", { error: true, cross: true, ms: 7500 });
+        toast("L'acompanyant \"" + e.data.name + "\" ja consta en un altre tiquet d'avui" + (e.data.user ? " (" + e.data.user + ")" : "") + ". Un administrador ho ha de validar.", { error: true, cross: true, ms: 7500 });
       } else toast(e.message, { error: true });
+    }
+    try {
+      var res = await saveOnce(); await postSave(res);
+    } catch (e) {
+      if (e && e.data && e.data.companionDup && e.data.canOverride && admin) {
+        if (confirm("L'acompanyant \"" + e.data.name + "\" ja consta en un altre tiquet d'avui" + (e.data.user ? " (" + e.data.user + ")" : "") + ".\n\nPot ser un altre àpat (esmorzar/dinar). Vols validar-ho i desar igualment?")) {
+          payload.allowCompanionDup = true;
+          try { var res2 = await saveOnce(); await postSave(res2); } catch (e2) { showErr(e2); }
+        }
+      } else showErr(e);
     }
     unlockBtn();
   });
