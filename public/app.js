@@ -10,7 +10,7 @@
   };
   var CAT_KEYS = Object.keys(CATS);
   var EXPENSE_KEYS = CAT_KEYS.filter(function (k) { return k !== "combustible"; });
-  var APP_VERSION = "2025-07-03 · fila-pintada";
+  var APP_VERSION = "2025-07-03 · marca-discreta";
 
   // ---------- Idioma (català per defecte / castellà) ----------
   var lang = localStorage.getItem("lang") || "ca";
@@ -337,7 +337,7 @@
         var late = lateUnresolved(e);
         var moved = (e.lateMonth === "entry");
         var lateTag = late ? '<span class="latebadge">⚠ fora de termini</span>' : '';
-        var movedTag = moved ? '<span class="movedbadge">📅 mes d\'entrada</span>' : '';
+        var movedTag = moved ? '<span class="movedbadge" title="Entrat fora de termini">📅</span>' : '';
         var compTag = e.compFlag ? '<span class="compbadge">👥 acompanyant repetit</span>' : '';
         return '<div class="ticket' + (e.accounted ? ' acct' : '') + ((late || e.compFlag) ? ' late' : '') + (moved ? ' moved' : '') + '" data-id="' + e.id + '"><div class="bar" style="background:' + c.color + '"></div>' +
           '<div class="body"><span class="cat" style="color:' + c.color + '">' + c.label + '</span>' + whoTag + acctTag + lateTag + movedTag + compTag +
