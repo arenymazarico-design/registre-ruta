@@ -42,6 +42,7 @@ export async function ensure() {
   await sql`alter table tickets add column if not exists plate text default ''`;
   await sql`alter table tickets add column if not exists late_month text default ''`;
   await sql`alter table tickets add column if not exists comp_flag boolean default false`;
+  await sql`alter table tickets add column if not exists orig_date date`;
   await sql`create table if not exists readings (
     id text primary key,
     user_id text,

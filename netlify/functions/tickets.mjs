@@ -34,6 +34,7 @@ function rowToClient(r) {
     plate: r.plate || '',
     lateMonth: r.late_month || '',
     compFlag: !!r.comp_flag,
+    origDate: r.orig_date ? (r.orig_date instanceof Date ? r.orig_date.toISOString().slice(0, 10) : String(r.orig_date).slice(0, 10)) : '',
     photo: r.photo_url || null, accounted: !!r.accounted,
     createdAt: r.created_at ? new Date(r.created_at).getTime() : 0
   };
@@ -176,11 +177,23 @@ export default async (req) => {
       }
 
       // Resoldre un tiquet fora de termini: on s'ha de comptar (només admin).
+      // 'entry' = es grava amb la data del dia en què es va entrar (així entra al mes vigent).
+      // 'date'  = es manté (o es recupera) la data real del tiquet.
       if (b.setLateMonth !== undefined) {
         if (me.role !== 'admin') return json({ error: 'Només administradors' }, 403);
         const v = (b.setLateMonth === 'date' || b.setLateMonth === 'entry') ? b.setLateMonth : '';
-        await sql`update tickets set late_month=${v} where id=${b.id}`;
-        return json({ ok: true, id: b.id, lateMonth: v });
+        const cur = (await sql`select date, orig_date, created_at from tickets where id=${b.id}`)[0];
+        if (!cur) return json({ error: 'No trobat' }, 404);
+        const asDay = (x) => (x instanceof Date ? x.toISOString().slice(0, 10) : String(x).slice(0, 10));
+        if (v === 'entry') {
+          const entryDay = asDay(cur.created_at || new Date());
+          const keep = cur.orig_date ? asDay(cur.orig_date) : asDay(cur.date);
+          await sql`update tickets set late_month=${v}, orig_date=${keep}, date=${entryDay} where id=${b.id}`;
+          return json({ ok: true, id: b.id, lateMonth: v, date: entryDay });
+        }
+        const realDay = cur.orig_date ? asDay(cur.orig_date) : asDay(cur.date);
+        await sql`update tickets set late_month=${v}, date=${realDay} where id=${b.id}`;
+        return json({ ok: true, id: b.id, lateMonth: v, date: realDay });
       }
 
       // Marcar/desmarcar com a validat (només admin).

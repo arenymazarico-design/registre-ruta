@@ -10,7 +10,7 @@
   };
   var CAT_KEYS = Object.keys(CATS);
   var EXPENSE_KEYS = CAT_KEYS.filter(function (k) { return k !== "combustible"; });
-  var APP_VERSION = "2025-07-03 · menu-mitjana";
+  var APP_VERSION = "2025-07-03 · data-entrada";
 
   // ---------- Idioma (català per defecte / castellà) ----------
   var lang = localStorage.getItem("lang") || "ca";
@@ -335,10 +335,12 @@
         var whoTag = admin ? '<span class="who2">' + esc(e.user) + '</span>' : '';
         var acctTag = e.accounted ? '<span class="acctbadge">✓ validat</span>' : '';
         var late = lateUnresolved(e);
+        var moved = (e.lateMonth === "entry");
         var lateTag = late ? '<span class="latebadge">⚠ fora de termini</span>' : '';
+        var movedTag = moved ? '<span class="movedbadge">📅 mes d\'entrada</span>' : '';
         var compTag = e.compFlag ? '<span class="compbadge">👥 acompanyant repetit</span>' : '';
-        return '<div class="ticket' + (e.accounted ? ' acct' : '') + ((late || e.compFlag) ? ' late' : '') + '" data-id="' + e.id + '"><div class="bar" style="background:' + c.color + '"></div>' +
-          '<div class="body"><span class="cat" style="color:' + c.color + '">' + c.label + '</span>' + whoTag + acctTag + lateTag + compTag +
+        return '<div class="ticket' + (e.accounted ? ' acct' : '') + ((late || e.compFlag) ? ' late' : '') + (moved ? ' moved' : '') + '" data-id="' + e.id + '"><div class="bar" style="background:' + c.color + '"></div>' +
+          '<div class="body"><span class="cat" style="color:' + c.color + '">' + c.label + '</span>' + whoTag + acctTag + lateTag + movedTag + compTag +
           '<div class="concept">' + esc(e.place || c.label) + '</div>' + extra + '</div>' +
           '<div class="right"><span class="amt">' + eur(e.amount) + '</span>' + (e.photo ? '<span class="clip">📎</span>' : '') + '</div></div>';
       }).join("");
@@ -721,15 +723,19 @@
   }
   function renderLate(e) {
     var box = el("lateRow"); box.innerHTML = "";
-    if (!admin || !e || !isLateEntry(e)) return;
+    if (!admin || !e || (!isLateEntry(e) && !e.lateMonth)) return;
     var inDate = (e.lateMonth === "date"), inEntry = (e.lateMonth === "entry");
-    var dateM = monthLabel(ymOf(e.date));
+    var realDay = e.origDate || e.date;
+    var dateM = monthLabel(ymOf(realDay));
     var entryM = e.createdAt ? monthLabel(ymOf(isoDay(e.createdAt))) : "";
     var status = e.lateMonth
-      ? ("Assignat a <b>" + (inDate ? dateM + "</b> (mes de la data)" : entryM + "</b> (mes d'entrada)"))
-      : ("Ara compta a <b>" + entryM + "</b> (mes d'entrada)");
+      ? (inEntry
+        ? ("Assignat a <b>" + entryM + "</b> (mes d'entrada). S'ha gravat amb la data d'entrada; la data real del tiquet era " + realDay + ".")
+        : ("Assignat a <b>" + dateM + "</b> (mes de la data del tiquet)."))
+      : ("Ara compta a <b>" + entryM + "</b> (mes d'entrada).");
+    var noteCls = inEntry ? 'latenote movednote' : 'latenote';
     box.innerHTML =
-      '<div class="latenote">⚠ Tiquet fora de termini (correspon a un mes anterior ja tancat). ' + status + '.</div>' +
+      '<div class="' + noteCls + '">' + (inEntry ? "📅" : "⚠") + ' Tiquet fora de termini (correspon a un mes anterior ja tancat). ' + status + '</div>' +
       '<div class="actions" style="margin-bottom:10px">' +
       '<button type="button" class="btn-ghost" id="lateDate"' + (inDate ? ' disabled' : '') + '>📅 Passar a ' + dateM + '</button>' +
       '<button type="button" class="btn-ghost" id="lateEntry"' + (inEntry ? ' disabled' : '') + '>Deixar a ' + entryM + '</button></div>';
@@ -927,6 +933,7 @@
   function companionsCount(s) { return String(s || "").split(",").map(function (x) { return x.trim(); }).filter(Boolean).length; }
   function dietaAvg(e) { var people = companionsCount(e.companions) + 1; return people > 0 ? Number(e.amount) / people : Number(e.amount); }
   function dietaOverLimit(e) { return e.cat === "dietes" && cfg.menuMax > 0 && dietaAvg(e) > cfg.menuMax + 1e-9; }
+  function rowFlag(e) { return dietaOverLimit(e) ? "red" : ((e.lateMonth === "entry") ? "orange" : null); }
   function rowAllExp(e) { var f = e.cif ? (e.ticket || "") : "", t = e.cif ? "" : (e.ticket || ""); return [e.date, e.user, f, t, (CATS[e.cat] ? CATS[e.cat].label : e.cat), e.place || "", Number(e.amount), e.companions || "", e.notes || ""]; }
   function rowUserExp(e) { var f = e.cif ? (e.ticket || "") : "", t = e.cif ? "" : (e.ticket || ""); return [e.date, f, t, (CATS[e.cat] ? CATS[e.cat].label : e.cat), e.place || "", Number(e.amount), e.companions || "", e.notes || ""]; }
   function dlBlob(blob, filename) { var a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = filename; document.body.appendChild(a); a.click(); a.remove(); }
@@ -996,9 +1003,12 @@
     var hr = xlsxTop(ws, ctx, header, title, withLogo);
     rows.forEach(function (r, ri) {
       var row = xlsxRow(ws, ctx, hr + 1 + ri, r, header, euroCol);
-      if (rowFlags && rowFlags[ri]) {
-        for (var ci = 1; ci <= header.length; ci++) { row.getCell(ci).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFCE4E2" } }; }
-        if (euroCol) { var ec = row.getCell(euroCol); ec.font = { bold: true, color: { argb: "FFC0271E" } }; }
+      var fl = rowFlags && rowFlags[ri];
+      if (fl) {
+        var bg = (fl === "orange") ? "FFFFF0D8" : "FFFCE4E2";
+        var fg = (fl === "orange") ? "FFA5670A" : "FFC0271E";
+        for (var ci = 1; ci <= header.length; ci++) { row.getCell(ci).fill = { type: "pattern", pattern: "solid", fgColor: { argb: bg } }; }
+        if (euroCol) { var ec = row.getCell(euroCol); ec.font = { bold: true, color: { argb: fg } }; }
       }
     });
     if (addTotal && euroCol) {
@@ -1037,14 +1047,14 @@
   async function buildConsultaXlsx(list) {
     var ctx = await xlsxCtx();
     var headerAll = ["Data", "Usuari", "Número de factura", "Número tiquet", "Tipus de gasto", "Restaurant/Proveïdor", "Import", "Acompanyants", "Observacions"];
-    xlsxFlatSheet(ctx, "Consulta", headerAll, [13, 24, 18, 16, 15, 34, 13, 28, 40], list.map(rowAllExp), 7, null, false, true, list.map(dietaOverLimit));
+    xlsxFlatSheet(ctx, "Consulta", headerAll, [13, 24, 18, 16, 15, 34, 13, 28, 40], list.map(rowAllExp), 7, null, false, true, list.map(rowFlag));
     var byUser = {}, order = [];
     list.forEach(function (e) { if (!byUser[e.userId]) { byUser[e.userId] = []; order.push(e.userId); } byUser[e.userId].push(e); });
     var headerU = ["Data", "Número de factura", "Número tiquet", "Tipus de gasto", "Restaurant/Proveïdor", "Import", "Acompanyants", "Observacions"];
     var used = { "consulta": 1 };
     order.forEach(function (uid) {
       var nm = byUser[uid][0].user || "Usuari";
-      xlsxFlatSheet(ctx, safeSheet(nm, used), headerU, [13, 18, 16, 15, 34, 13, 28, 40], byUser[uid].map(rowUserExp), 6, "Despeses\n" + nm, true, true, byUser[uid].map(dietaOverLimit));
+      xlsxFlatSheet(ctx, safeSheet(nm, used), headerU, [13, 18, 16, 15, 34, 13, 28, 40], byUser[uid].map(rowUserExp), 6, "Despeses\n" + nm, true, true, byUser[uid].map(rowFlag));
     });
     var buf = await ctx.wb.xlsx.writeBuffer();
     dlBlob(new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), "consulta.xlsx");
