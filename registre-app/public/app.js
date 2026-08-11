@@ -10,7 +10,7 @@
   };
   var CAT_KEYS = Object.keys(CATS);
   var EXPENSE_KEYS = CAT_KEYS.filter(function (k) { return k !== "combustible"; });
-  var APP_VERSION = "2025-07-03 · km-repas-matricula";
+  var APP_VERSION = "2025-07-03 · sw-network-only";
 
   // ---------- Idioma (català per defecte / castellà) ----------
   var lang = localStorage.getItem("lang") || "ca";
@@ -1463,7 +1463,7 @@
     var today = todayStr(); el("readDate").value = today;
     el("readInfo").textContent = "Apunta la lectura del comptador de km del cotxe. Es demana un cop al mes.";
     el("readDel").style.display = "none";
-    el("readPlateWrap").style.display = "none"; el("readPlate").value = myActivePlate();
+    var rpw = el("readPlateWrap"); if (rpw) rpw.style.display = "none"; var rp = el("readPlate"); if (rp) rp.value = myActivePlate();
     var ym = today.slice(0, 7), ap = myActivePlate();
     var ex = readings.filter(function (r) { return r.userId === me.id && r.ym === ym && (r.plate || "") === ap; })[0];
     el("readKm").value = ex ? ex.km : "";
@@ -1476,8 +1476,8 @@
     el("readKm").value = r.km; el("readDate").value = r.date;
     el("readInfo").textContent = "Lectura" + (admin ? " · " + r.user : "");
     el("readDel").style.display = "";
-    el("readPlate").value = r.plate || "";
-    el("readPlateWrap").style.display = admin ? "block" : "none";
+    var rp2 = el("readPlate"); if (rp2) rp2.value = r.plate || "";
+    var rpw2 = el("readPlateWrap"); if (rpw2) rpw2.style.display = admin ? "block" : "none";
     fillPlatesDatalist(r.userId);
     el("readScrim").setAttribute("data-open", "true"); el("readSheet").setAttribute("data-open", "true");
   }
@@ -1489,7 +1489,7 @@
     try {
       var payload = { km: Number(v), date: el("readDate").value || todayStr() };
       if (readEditId) payload.id = readEditId;
-      if (readEditId && admin) payload.plate = el("readPlate").value.trim().toUpperCase();
+      if (readEditId && admin && el("readPlate")) payload.plate = el("readPlate").value.trim().toUpperCase();
       await api("/api/readings", "POST", payload); await loadReadings(); closeRead(); hideKmReminder();
       if (el("kmSheet").getAttribute("data-open") === "true") renderKm();
       toast("Km desats");
