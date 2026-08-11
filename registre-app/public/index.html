@@ -352,6 +352,7 @@
     <p style="font-size:13px;color:var(--muted);margin:0 0 12px" id="readInfo">Apunta la lectura del comptador de km del cotxe. Es demana un cop al mes.</p>
     <div class="field amtwrap"><label for="readKm">Km del comptador</label><input id="readKm" type="number" inputmode="numeric" step="1" min="0" placeholder="0" style="font-family:var(--mono);font-size:24px;font-weight:600"></div>
     <div class="field"><label for="readDate">Data</label><input id="readDate" type="date"></div>
+    <div class="field" id="readPlateWrap" style="display:none"><label for="readPlate">Matrícula</label><input id="readPlate" type="text" list="platesList" autocomplete="off" placeholder="Matrícula" style="text-transform:uppercase"></div>
     <button type="button" class="btn-primary" id="readSave" style="width:100%">Desa la lectura</button>
     <button type="button" class="btn-danger" id="readDel" style="width:100%;margin-top:10px;display:none">Eliminar lectura</button>
   </div>

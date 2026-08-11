@@ -10,7 +10,7 @@
   };
   var CAT_KEYS = Object.keys(CATS);
   var EXPENSE_KEYS = CAT_KEYS.filter(function (k) { return k !== "combustible"; });
-  var APP_VERSION = "2025-07-03 · idiomes-kmdata";
+  var APP_VERSION = "2025-07-03 · km-repas-matricula";
 
   // ---------- Idioma (català per defecte / castellà) ----------
   var lang = localStorage.getItem("lang") || "ca";
@@ -116,7 +116,13 @@
     "Assignar al mes de la data": "Asignar al mes de la fecha", "Deixar al mes d'entrada": "Dejar en el mes de entrada",
     "Repostatge (foto)": "Repostaje (foto)",
     "Km actuals del comptador": "Km actuales del cuentakilómetros",
-    "Acompanyant repetit": "Acompañante repetido"
+    "Acompanyant repetit": "Acompañante repetido",
+    "Filtra per dates": "Filtra por fechas",
+    "Vehicle habitual:": "Vehículo habitual:", "Vehicle actiu": "Vehículo activo",
+    "(substitució)": "(sustitución)", "↩︎ Tornar al vehicle habitual": "↩︎ Volver al vehículo habitual",
+    "Matrícula (ex. 1234ABC)": "Matrícula (ej. 1234ABC)", "Cap vehicle": "Sin vehículo",
+    "Desa els vehicles": "Guardar los vehículos", "Matrícula del vehicle": "Matrícula del vehículo",
+    "Activar i desar km": "Activar y guardar km"
   };
   var translating = false;
   function translateNode(node) {
@@ -159,7 +165,11 @@
   }
   try { if (lang === "es") applyLang(); } catch (e) { }
   var MONTHS = ["gener", "febrer", "març", "abril", "maig", "juny", "juliol", "agost", "setembre", "octubre", "novembre", "desembre"];
+  var MONTHS_ES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
   var DAYS = ["diumenge", "dilluns", "dimarts", "dimecres", "dijous", "divendres", "dissabte"];
+  var DAYS_ES = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
+  function months() { return lang === "es" ? MONTHS_ES : MONTHS; }
+  function days() { return lang === "es" ? DAYS_ES : DAYS; }
 
   // ---------- Estat ----------
   var token = localStorage.getItem("token") || "";
@@ -197,7 +207,7 @@
   function ymOf(s) { return String(s).slice(0, 7); }
   function todayStr() { var d = new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); }
   function parseDate(s) { var p = String(s).split("-"); return new Date(+p[0], +p[1] - 1, +p[2]); }
-  function fmtDay(s) { var d = parseDate(s); return DAYS[d.getDay()] + ", " + d.getDate() + " " + MONTHS[d.getMonth()]; }
+  function fmtDay(s) { var d = parseDate(s); return days()[d.getDay()] + ", " + d.getDate() + " " + months()[d.getMonth()]; }
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
   function initial(n) { return (n || "?").trim().charAt(0).toUpperCase(); }
   function applyTheme() { if (cfg.color) document.documentElement.style.setProperty("--amber", cfg.color); else document.documentElement.style.removeProperty("--amber"); }
@@ -317,12 +327,12 @@
       (cfg.logo ? '<img class="hdrlogo" src="' + cfg.logo + '" alt="logo">' : '') +
       '<div style="display:flex;flex-direction:column"><h1 style="text-transform:none;letter-spacing:.01em">PLUgastos</h1><span class="sub">' + (admin ? 'Panell d\'administrador' : 'despeses de ruta') + '</span></div></div>' +
       '<div class="who">' + (admin ? '<span class="adminbadge">ADMIN</span>' : '') + '<button class="avatar" id="avatarBtn">' + esc(initial(me.name)) + '</button></div></div>' +
-      '<div class="monthbar"><button id="prevM">‹</button><div class="m">' + MONTHS[view.getMonth()] + ' ' + view.getFullYear() + '</div><button id="nextM">›</button></div>' +
+      '<div class="monthbar"><button id="prevM">‹</button><div class="m">' + months()[view.getMonth()] + ' ' + view.getFullYear() + '</div><button id="nextM">›</button></div>' +
       '<div class="total"><div class="big">' + eur(total) + '</div><div class="lbl">' + totalLbl + '</div></div>' +
       '<div class="breakdown">' + bd + '</div></header>' + renderToolbar() + '<main id="list"></main></div>' +
       '<div class="fabbar"><button class="fab" id="camBtn"><span class="cam">📷</span> Fer foto del tiquet</button>' + (admin ? '<button class="nolink" id="manualBtn">afegir sense foto</button>' : '') + '</div>';
 
-    renderList(mes); bindMain();
+    renderList(mes); bindMain(); if (lang === "es") applyLang();
   }
 
   function renderToolbar() {
@@ -403,6 +413,7 @@
     var mv = el("miVeh"); if (mv) mv.onclick = function () { closeMenu(); openVehicles(null); };
     el("miLogout").onclick = function () { closeMenu(); clearSession(); me = null; render(); };
     el("menuCard").querySelectorAll(".langbtn").forEach(function (b) { b.onclick = function () { setLang(b.getAttribute("data-l")); }; });
+    if (lang === "es") applyLang();
   }
   function closeMenu() { el("menu").removeAttribute("data-open"); }
   el("menuBg").onclick = closeMenu;
@@ -441,6 +452,7 @@
     el("umAdd").onclick = function () { renderUMEdit(null); };
     el("umXls").onchange = function (ev) { var f = ev.target.files && ev.target.files[0]; if (f) importUsers(f); ev.target.value = ""; };
     el("umTpl").onclick = function () { downloadTemplate("plantilla-usuaris.xlsx", [["Nom", "PIN", "Rol", "Vehicles"], ["Joan Exemple", "1234", "usuari", "1234ABC 5678DEF"], ["Anna Admin", "4321", "admin", "9876GHI"]]); };
+    if (lang === "es") applyLang();
   }
 
   function importUsers(file) {
@@ -508,6 +520,7 @@
         renderUMList(); render(); toast("Usuari eliminat");
       } catch (e) { toast(e.message); }
     };
+    if (lang === "es") applyLang();
   }
 
   // ---------- Configuració ----------
@@ -574,6 +587,7 @@
     };
     el("cNamesTpl").onclick = function () { downloadTemplate("plantilla-noms.xlsx", [["Nom"], ["Joan Exemple"], ["Maria Exemple"]]); };
     el("cSave").onclick = saveCfg;
+    if (lang === "es") applyLang();
   }
   function compressLogo(file, cb) {
     var reader = new FileReader();
@@ -656,9 +670,10 @@
     el("place").placeholder = fuel ? "Nom de la gasolinera" : "Nom del comerç";
     if (fuel) fillPlatesDatalist();
   }
-  function fillPlatesDatalist() {
+  function fillPlatesDatalist(userId) {
     var dl = el("platesList"); if (!dl) return;
-    var u = roster.filter(function (x) { return x.id === me.id; })[0];
+    var uid = userId || me.id;
+    var u = roster.filter(function (x) { return x.id === uid; })[0];
     var vs = (u && u.vehicles) ? u.vehicles : [];
     dl.innerHTML = vs.map(function (p) { return '<option value="' + esc(p) + '"></option>'; }).join("");
   }
@@ -708,6 +723,7 @@
     el("amount").value = e.amount; el("ticket").value = e.ticket || ""; el("place").value = e.place || "";
     el("cif").value = e.cif || ""; setNumberMode(!!e.cif);
     el("litres").value = (e.litres != null) ? e.litres : ""; el("fuelKm").value = ""; el("fuelPlate").value = e.plate || "";
+    if (e.cat === "combustible") fillPlatesDatalist(e.userId);
     el("date").value = e.date; setCompanionsFromString(e.companions || ""); el("notes").value = e.notes || "";
     pendingPhoto = e.photo || null; setThumb(pendingPhoto);
     el("delBtn").style.display = (admin || e.userId === me.id) ? "block" : "none";
@@ -790,7 +806,7 @@
       toast(val ? "Marcat com a validat" : "Validació treta");
     } catch (e) { toast(e.message); }
   }
-  function openSheet_() { el("scrim").setAttribute("data-open", "true"); el("sheet").setAttribute("data-open", "true"); }
+  function openSheet_() { el("scrim").setAttribute("data-open", "true"); el("sheet").setAttribute("data-open", "true"); if (lang === "es") applyLang(); }
   function closeSheet() { el("scrim").removeAttribute("data-open"); el("sheet").removeAttribute("data-open"); }
   el("closeSheet").onclick = closeSheet; el("scrim").onclick = closeSheet;
   el("retakeBtn").onclick = function () { retakeMode = true; el("photo").value = ""; el("photo").click(); };
@@ -939,6 +955,7 @@
     el("qCsv").onclick = exportCsv;
     refreshUserMsel();
     updateConsultaSummary();
+    if (lang === "es") applyLang();
   }
   function consultaRows() {
     var list = computeConsulta();
@@ -1148,7 +1165,7 @@
   function addDay(s, n) { var d = new Date((dayNum(s) + n) * 86400000); return d.toISOString().slice(0, 10); }
   function maxD(a, b) { return a > b ? a : b; }
   function minD(a, b) { return a < b ? a : b; }
-  function monthLabel(ym) { var y = ym.slice(0, 4), m = +ym.slice(5, 7); var s = MONTHS[m - 1] + " " + y; return s.charAt(0).toUpperCase() + s.slice(1); }
+  function monthLabel(ym) { var y = ym.slice(0, 4), m = +ym.slice(5, 7); var s = months()[m - 1] + " " + y; return s.charAt(0).toUpperCase() + s.slice(1); }
   function firstDay(ym) { return ym + "-01"; }
   function nextMonthFirst(ym) { var y = +ym.slice(0, 4), m = +ym.slice(5, 7) + 1; if (m > 12) { m = 1; y++; } return y + "-" + String(m).padStart(2, "0") + "-01"; }
   function monthsBetween(fy, ty) { var out = [], y = +fy.slice(0, 4), m = +fy.slice(5, 7), ey = +ty.slice(0, 4), em = +ty.slice(5, 7), g = 0; while ((y < ey || (y === ey && m <= em)) && g < 600) { out.push(y + "-" + String(m).padStart(2, "0")); m++; if (m > 12) { m = 1; y++; } g++; } return out; }
@@ -1159,8 +1176,9 @@
     if (!r.length) return null;
     if (r.length === 1) return r[0].km;
     var t = dayNum(dateStr);
-    if (t <= dayNum(r[0].date)) { var s0 = (r[1].km - r[0].km) / ((dayNum(r[1].date) - dayNum(r[0].date)) || 1); return r[0].km + s0 * (t - dayNum(r[0].date)); }
-    if (t >= dayNum(r[r.length - 1].date)) { var a = r[r.length - 2], b = r[r.length - 1]; var s1 = (b.km - a.km) / ((dayNum(b.date) - dayNum(a.date)) || 1); return b.km + s1 * (t - dayNum(b.date)); }
+    // No s'extrapola: abans de la primera lectura val la primera; després de l'última val l'última.
+    if (t <= dayNum(r[0].date)) return r[0].km;
+    if (t >= dayNum(r[r.length - 1].date)) return r[r.length - 1].km;
     for (var i = 0; i < r.length - 1; i++) { var d0 = dayNum(r[i].date), d1 = dayNum(r[i + 1].date); if (t >= d0 && t <= d1) { var f = (t - d0) / ((d1 - d0) || 1); return r[i].km + (r[i + 1].km - r[i].km) * f; } }
     return r[r.length - 1].km;
   }
@@ -1290,7 +1308,7 @@
     tags.querySelectorAll("[data-rem]").forEach(function (b) { b.onclick = function () { var id = b.getAttribute("data-rem"); var i = km.users.indexOf(id); if (i >= 0) km.users.splice(i, 1); refreshKmMsel(); renderKmReport(); renderKmLists(); }; });
     list.querySelectorAll(".msel-opt").forEach(function (o) { o.onclick = function () { var id = o.getAttribute("data-id"); var i = km.users.indexOf(id); if (i >= 0) km.users.splice(i, 1); else km.users.push(id); refreshKmMsel(); renderKmReport(); renderKmLists(); }; });
   }
-  function renderKmReport() { el("kmReport").innerHTML = (admin && km.group) ? reportGrouped() : reportDetailed(); }
+  function renderKmReport() { el("kmReport").innerHTML = (admin && km.group) ? reportGrouped() : reportDetailed(); if (lang === "es") applyLang(); }
   function kmFuelRow(e) {
     return '<div class="fuelrow" data-id="' + e.id + '" style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 12px;border:1px solid var(--line);border-radius:11px;margin-bottom:7px;cursor:pointer">' +
       '<div style="min-width:0"><b style="font-size:14px">' + esc(e.place || "Gasolinera") + '</b><div style="font-size:12px;color:var(--muted)">' + e.date + (admin ? " · " + esc(e.user) : "") + (e.plate ? " · " + esc(e.plate) : "") + '</div></div>' +
@@ -1313,10 +1331,12 @@
     el("kmReadsList").innerHTML = '<div style="height:1px;background:var(--line);margin:16px 0"></div><label style="display:block;font-size:12px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--muted);margin-bottom:6px">Lectures de km · toca per editar <span>(' + reads.length + ')</span></label>' +
       (reads.length ? reads.slice(0, 150).map(kmReadRow).join("") : '<p style="font-size:13px;color:var(--muted);margin:0 0 8px">Cap lectura.</p>');
     el("kmReadsList").querySelectorAll(".readrow").forEach(function (r) { r.onclick = function () { openReadEdit(r.getAttribute("data-id")); }; });
+    if (lang === "es") applyLang();
   }
   function renderKm() {
     var addBtns = '<div class="actions" style="margin-bottom:12px"><button type="button" class="btn-primary" id="fuAddPhoto"><span class="cam">📷</span> Repostatge (foto)</button><button type="button" class="btn-ghost" id="fuAddManual" style="flex:0 0 auto;width:auto;padding:14px 18px">Sense foto</button></div>';
     var dateFilter =
+      '<label style="display:block;font-size:12px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--muted);margin:2px 0 6px">Filtra per dates</label>' +
       '<div class="grid2" style="margin-top:2px"><div class="field"><label for="kmFrom">Des de</label><input id="kmFrom" type="date" value="' + esc(km.from) + '"></div>' +
       '<div class="field"><label for="kmTo">Fins a</label><input id="kmTo" type="date" value="' + esc(km.to) + '"></div></div>';
     var filters = "";
@@ -1351,6 +1371,7 @@
     }
     el("kmXls").onclick = exportKm;
     el("kmPrint").onclick = printKm;
+    if (lang === "es") applyLang();
   }
   function printKm() {
     el("printArea").innerHTML = '<h2>Informe de km i combustible</h2>' + ((admin && km.group) ? reportGrouped() : reportDetailed());
@@ -1442,17 +1463,22 @@
     var today = todayStr(); el("readDate").value = today;
     el("readInfo").textContent = "Apunta la lectura del comptador de km del cotxe. Es demana un cop al mes.";
     el("readDel").style.display = "none";
+    el("readPlateWrap").style.display = "none"; el("readPlate").value = myActivePlate();
     var ym = today.slice(0, 7), ap = myActivePlate();
     var ex = readings.filter(function (r) { return r.userId === me.id && r.ym === ym && (r.plate || "") === ap; })[0];
     el("readKm").value = ex ? ex.km : "";
+    fillPlatesDatalist();
     el("readScrim").setAttribute("data-open", "true"); el("readSheet").setAttribute("data-open", "true");
   }
   function openReadEdit(id) {
     var r = readings.filter(function (x) { return x.id === id; })[0]; if (!r) return;
     readEditId = id;
     el("readKm").value = r.km; el("readDate").value = r.date;
-    el("readInfo").textContent = "Lectura de " + (r.plate || "(sense matrícula)") + (admin ? " · " + r.user : "");
+    el("readInfo").textContent = "Lectura" + (admin ? " · " + r.user : "");
     el("readDel").style.display = "";
+    el("readPlate").value = r.plate || "";
+    el("readPlateWrap").style.display = admin ? "block" : "none";
+    fillPlatesDatalist(r.userId);
     el("readScrim").setAttribute("data-open", "true"); el("readSheet").setAttribute("data-open", "true");
   }
   function closeRead() { el("readScrim").removeAttribute("data-open"); el("readSheet").removeAttribute("data-open"); }
@@ -1463,6 +1489,7 @@
     try {
       var payload = { km: Number(v), date: el("readDate").value || todayStr() };
       if (readEditId) payload.id = readEditId;
+      if (readEditId && admin) payload.plate = el("readPlate").value.trim().toUpperCase();
       await api("/api/readings", "POST", payload); await loadReadings(); closeRead(); hideKmReminder();
       if (el("kmSheet").getAttribute("data-open") === "true") renderKm();
       toast("Km desats");
@@ -1503,7 +1530,7 @@
     }).join("") : '<span style="font-size:13px;color:var(--muted)">Cap vehicle</span>';
     var subActive = self && active && main && active !== main;
     var activeLine = self ? (active ? '<p style="font-size:14px;margin:0 0 4px">Vehicle actiu: <b>' + esc(active) + '</b>' + (subActive ? ' (substitució)' : '') + '</p>' : '<p style="font-size:13px;color:var(--muted);margin:0 0 4px">Cap vehicle actiu</p>') : '';
-    var returnBtn = subActive ? '<button type="button" class="btn-primary" id="vehReturn" style="width:100%;margin:6px 0 12px">↩︎ Tornar al vehicle habitual (' + esc(main) + ')</button>' : '';
+    var returnBtn = subActive ? '<button type="button" class="btn-primary" id="vehReturn" style="width:100%;margin:6px 0 12px">↩︎ Tornar al vehicle habitual <span>(' + esc(main) + ')</span></button>' : '';
     var mainSel = (self && vehTmp.length) ?
       '<div class="field" style="margin-top:8px"><label for="vehMain">Vehicle habitual</label><select id="vehMain">' +
       vehTmp.map(function (p) { return '<option value="' + esc(p) + '"' + (p === main ? ' selected' : '') + '>' + esc(p) + '</option>'; }).join("") + '</select></div>' : '';
@@ -1536,6 +1563,7 @@
       try { var payload = { setVehicles: vehTmp }; if (vehTarget) payload.id = vehTarget; await api("/api/users", "POST", payload); await loadRoster(); closeVeh(); toast("Vehicles desats"); }
       catch (e) { toast(e.message, { error: true }); }
     };
+    if (lang === "es") applyLang();
   }
   function showActForm(plate) {
     var f = el("vehActForm"); if (!f) return;
