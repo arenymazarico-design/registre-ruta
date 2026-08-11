@@ -34,7 +34,11 @@ export default async (req) => {
         if (!cur) return json({ error: 'No trobat' }, 404);
         if (me.role !== 'admin' && cur.user_id !== me.uid) return json({ error: 'Sense permís' }, 403);
         const date = b.date || (cur.date instanceof Date ? cur.date.toISOString().slice(0, 10) : String(cur.date).slice(0, 10));
-        await sql`update readings set km=${km}, date=${date}, ym=${date.slice(0, 7)} where id=${b.id}`;
+        const ym = date.slice(0, 7);
+        const plate = (me.role === 'admin' && b.plate != null) ? String(b.plate).trim().toUpperCase() : (cur.plate || '');
+        const clash = (await sql`select id from readings where user_id=${cur.user_id} and ym=${ym} and coalesce(plate,'')=${plate} and id<>${b.id}`)[0];
+        if (clash) return json({ error: 'Ja hi ha una lectura d\'aquesta matrícula per aquest mes.' }, 409);
+        await sql`update readings set km=${km}, date=${date}, ym=${ym}, plate=${plate} where id=${b.id}`;
         return json({ ok: true, id: b.id });
       }
 
