@@ -44,15 +44,22 @@ export default async (req) => {
 
       const date = b.date || new Date().toISOString().slice(0, 10);
       const ym = date.slice(0, 7);
-      const u = (await sql`select active_plate from users where id=${me.uid}`)[0] || {};
-      const plate = (b.plate != null ? String(b.plate) : (u.active_plate || '')).trim().toUpperCase();
-      const exists = (await sql`select id from readings where user_id=${me.uid} and ym=${ym} and coalesce(plate,'')=${plate}`)[0];
+      let targetUid = me.uid, targetName = me.name, targetActive = '';
+      if (b.forUserId && me.role === 'admin') {
+        const tu = (await sql`select id, name, active_plate from users where id=${b.forUserId}`)[0];
+        if (tu) { targetUid = tu.id; targetName = tu.name; targetActive = tu.active_plate || ''; }
+      } else {
+        const u = (await sql`select active_plate from users where id=${me.uid}`)[0] || {};
+        targetActive = u.active_plate || '';
+      }
+      const plate = (b.plate != null ? String(b.plate) : targetActive).trim().toUpperCase();
+      const exists = (await sql`select id from readings where user_id=${targetUid} and ym=${ym} and coalesce(plate,'')=${plate}`)[0];
       if (exists) {
         await sql`update readings set km=${km}, date=${date} where id=${exists.id}`;
         return json({ ok: true, id: exists.id });
       }
       const id = uid();
-      await sql`insert into readings (id,user_id,user_name,ym,date,km,plate) values (${id},${me.uid},${me.name},${ym},${date},${km},${plate})`;
+      await sql`insert into readings (id,user_id,user_name,ym,date,km,plate) values (${id},${targetUid},${targetName},${ym},${date},${km},${plate})`;
       return json({ ok: true, id });
     }
 
