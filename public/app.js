@@ -10,7 +10,7 @@
   };
   var CAT_KEYS = Object.keys(CATS);
   var EXPENSE_KEYS = CAT_KEYS.filter(function (k) { return k !== "combustible"; });
-  var APP_VERSION = "2025-07-03 · admin-lectures-km";
+  var APP_VERSION = "2025-07-03 · foto-memoria";
 
   // ---------- Idioma (català per defecte / castellà) ----------
   var lang = localStorage.getItem("lang") || "ca";
@@ -611,6 +611,7 @@
   el("photo").addEventListener("change", function (ev) {
     var file = ev.target.files && ev.target.files[0]; if (!file) return;
     compress(file, function (dataUrl) {
+      el("photo").value = "";
       if (!dataUrl) { toast("No s'ha pogut carregar la foto"); return; }
       if (retakeMode) { retakeMode = false; pendingPhoto = dataUrl; setThumb(dataUrl); return; }
       pendingPhoto = dataUrl; runExtraction(dataUrl);
@@ -635,9 +636,28 @@
     reader.readAsArrayBuffer(file);
   }
   function compress(file, cb) {
-    var reader = new FileReader();
-    reader.onload = function () { var img = new Image(); img.onload = function () { var max = 1100, w = img.width, h = img.height; if (w > h && w > max) { h = Math.round(h * max / w); w = max; } else if (h >= w && h > max) { w = Math.round(w * max / h); h = max; } var cv = document.createElement("canvas"); cv.width = w; cv.height = h; cv.getContext("2d").drawImage(img, 0, 0, w, h); cb(cv.toDataURL("image/jpeg", 0.62)); }; img.onerror = function () { cb(null); }; img.src = reader.result; };
-    reader.onerror = function () { cb(null); }; reader.readAsDataURL(file);
+    var MAX = 1100, Q = 0.6;
+    function scale(w, h) { if (w > h && w > MAX) { return [MAX, Math.round(h * MAX / w)]; } if (h >= w && h > MAX) { return [Math.round(w * MAX / h), MAX]; } return [w, h]; }
+    function toCanvas(src, w, h) { var d = scale(w, h); var cv = document.createElement("canvas"); cv.width = d[0]; cv.height = d[1]; cv.getContext("2d").drawImage(src, 0, 0, d[0], d[1]); var out = null; try { out = cv.toDataURL("image/jpeg", Q); } catch (e) { out = null; } cv.width = cv.height = 0; return out; }
+    function legacy() {
+      var reader = new FileReader();
+      reader.onload = function () {
+        var img = new Image();
+        img.onload = function () { cb(toCanvas(img, img.width, img.height)); img.src = ""; };
+        img.onerror = function () { cb(null); };
+        img.src = reader.result;
+      };
+      reader.onerror = function () { cb(null); };
+      reader.readAsDataURL(file);
+    }
+    // Via preferida: descodifica de forma eficient i allibera la memòria de seguida.
+    if (window.createImageBitmap) {
+      window.createImageBitmap(file).then(function (bmp) {
+        var out = toCanvas(bmp, bmp.width, bmp.height);
+        if (bmp.close) bmp.close();
+        cb(out);
+      }).catch(function () { legacy(); });
+    } else legacy();
   }
   async function runExtraction(dataUrl) {
     el("extractImg").src = dataUrl; el("extract").setAttribute("data-open", "true");
