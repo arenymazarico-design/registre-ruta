@@ -126,15 +126,15 @@ export default async (req) => {
       }
 
       const id = uid();
-      let photoUrl = null;
-      if (b.photoBase64) { await photos().set(id, b.photoBase64); photoUrl = '/api/photo?id=' + id; }
+      let photoUrl = null, photoBytes = null;
+      if (b.photoBase64) { await photos().set(id, b.photoBase64); photoUrl = '/api/photo?id=' + id; photoBytes = b.photoBase64.length; }
       const litresIn = (b.cat === 'combustible' && b.litres !== '' && b.litres != null && !isNaN(Number(b.litres))) ? Number(b.litres) : null;
       const kmIn = (b.cat === 'combustible' && b.km !== '' && b.km != null && !isNaN(Number(b.km))) ? Number(b.km) : null;
       const au = (await sql`select active_plate from users where id=${me.uid}`)[0] || {};
       const plateIn = (b.plate !== undefined && b.plate !== null) ? String(b.plate).trim().toUpperCase() : (au.active_plate || '').trim().toUpperCase();
-      await sql`insert into tickets (id,user_id,user_name,cat,amount,ticket_no,place,cif,date,companions,notes,photo_url,litres,km,plate,comp_flag)
+      await sql`insert into tickets (id,user_id,user_name,cat,amount,ticket_no,place,cif,date,companions,notes,photo_url,litres,km,plate,comp_flag,photo_bytes)
         values (${id},${me.uid},${me.name},${b.cat},${Number(b.amount)},${b.ticket_no || ''},${b.place || ''},${b.cif || ''},
-        ${b.date},${b.cat === 'dietes' ? (b.companions || '') : ''},${b.notes || ''},${photoUrl},${litresIn},${kmIn},${plateIn},${compFlag})`;
+        ${b.date},${b.cat === 'dietes' ? (b.companions || '') : ''},${b.notes || ''},${photoUrl},${litresIn},${kmIn},${plateIn},${compFlag},${photoBytes})`;
 
       // enviament automàtic (amb motiu si no s'envia)
       const cfg = (await sql`select email from app_config where id=1`)[0] || {};
@@ -215,13 +215,14 @@ export default async (req) => {
         if (clash) compFlagUp = true;
       }
       let photoUrl = cur.photo_url;
-      if (b.photoBase64) { await photos().set(b.id, b.photoBase64); photoUrl = '/api/photo?id=' + b.id; }
+      let photoBytesUp = cur.photo_bytes != null ? cur.photo_bytes : null;
+      if (b.photoBase64) { await photos().set(b.id, b.photoBase64); photoUrl = '/api/photo?id=' + b.id; photoBytesUp = b.photoBase64.length; }
       const litresUp = (b.cat === 'combustible' && b.litres !== '' && b.litres != null && !isNaN(Number(b.litres))) ? Number(b.litres) : null;
       const kmUp = (b.cat === 'combustible' && b.km !== '' && b.km != null && !isNaN(Number(b.km))) ? Number(b.km) : null;
       const plateUp = (b.plate !== undefined && b.plate !== null) ? String(b.plate).trim().toUpperCase() : (cur.plate || '');
       await sql`update tickets set cat=${b.cat}, amount=${Number(b.amount)}, ticket_no=${b.ticket_no || ''},
         place=${b.place || ''}, cif=${b.cif || ''}, date=${b.date}, companions=${b.cat === 'dietes' ? (b.companions || '') : ''},
-        notes=${b.notes || ''}, photo_url=${photoUrl}, litres=${litresUp}, km=${kmUp}, plate=${plateUp}, comp_flag=${compFlagUp} where id=${b.id}`;
+        notes=${b.notes || ''}, photo_url=${photoUrl}, litres=${litresUp}, km=${kmUp}, plate=${plateUp}, comp_flag=${compFlagUp}, photo_bytes=${photoBytesUp} where id=${b.id}`;
       return json({ ok: true, id: b.id });
     }
 

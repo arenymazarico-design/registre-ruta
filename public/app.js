@@ -10,7 +10,7 @@
   };
   var CAT_KEYS = Object.keys(CATS);
   var EXPENSE_KEYS = CAT_KEYS.filter(function (k) { return k !== "combustible"; });
-  var APP_VERSION = "2025-07-03 · foto-memoria";
+  var APP_VERSION = "2025-07-03 · estat-sistema";
 
   // ---------- Idioma (català per defecte / castellà) ----------
   var lang = localStorage.getItem("lang") || "ca";
@@ -118,6 +118,9 @@
     "Km actuals del comptador": "Km actuales del cuentakilómetros",
     "Acompanyant repetit": "Acompañante repetido",
     "Filtra per dates": "Filtra por fechas",
+    "Estat del sistema": "Estado del sistema", "Base de dades (Neon)": "Base de datos (Neon)",
+    "Fotos dels tiquets (Netlify Blobs)": "Fotos de los tickets (Netlify Blobs)", "Despeses per tipus": "Gastos por tipo",
+    "Usuaris": "Usuarios", "Tiquets": "Tickets", "Lectures de km": "Lecturas de km", "Fotos": "Fotos", "Actualitzar": "Actualizar", "Carregant…": "Cargando…",
     "📋 Apuntar lectura de km": "📋 Apuntar lectura de km",
     "Apunta la lectura del comptador de km del cotxe.": "Apunta la lectura del cuentakilómetros del coche.",
     "Vehicle habitual:": "Vehículo habitual:", "Vehicle actiu": "Vehículo activo",
@@ -398,6 +401,7 @@
     var items = "";
     if (admin) items += '<button class="mi" id="miUsers">Gestionar usuaris</button>';
     if (admin) items += '<button class="mi" id="miConfig">Configuració</button>';
+    if (admin) items += '<button class="mi" id="miStat">Estat del sistema</button>';
     items += '<button class="mi" id="miPin">Canviar contrasenya</button>';
     items += '<button class="mi" id="miKm">Combustible i km</button>';
     if (myHasVehicle()) items += '<button class="mi" id="miVeh">Els meus vehicles</button>';
@@ -410,6 +414,7 @@
     el("menu").setAttribute("data-open", "true");
     if (admin) el("miUsers").onclick = function () { closeMenu(); openUM(); };
     if (admin) el("miConfig").onclick = function () { closeMenu(); openCfg(); };
+    if (admin) el("miStat").onclick = function () { closeMenu(); openStatus(); };
     el("miPin").onclick = function () { closeMenu(); openPin(); };
     el("miKm").onclick = function () { closeMenu(); openKm(); };
     var mv = el("miVeh"); if (mv) mv.onclick = function () { closeMenu(); openVehicles(null); };
@@ -418,6 +423,59 @@
     if (lang === "es") applyLang();
   }
   function closeMenu() { el("menu").removeAttribute("data-open"); }
+
+  // ---------- Estat del sistema ----------
+  function fmtBytes(b) {
+    if (!b || b < 0) return "0 B";
+    if (b < 1024) return b + " B";
+    if (b < 1024 * 1024) return (b / 1024).toFixed(1) + " KB";
+    if (b < 1024 * 1024 * 1024) return (b / (1024 * 1024)).toFixed(1) + " MB";
+    return (b / (1024 * 1024 * 1024)).toFixed(2) + " GB";
+  }
+  function statCard(label, value, sub) {
+    return '<div style="background:var(--card);border:1px solid var(--line);border-radius:12px;padding:13px 15px">' +
+      '<div style="font-size:12px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.03em">' + label + '</div>' +
+      '<div style="font-family:var(--mono);font-size:22px;font-weight:700;margin-top:4px">' + value + '</div>' +
+      (sub ? '<div style="font-size:12px;color:var(--muted);margin-top:2px">' + sub + '</div>' : '') + '</div>';
+  }
+  function statBar(usedBytes, limitBytes) {
+    var pct = limitBytes > 0 ? Math.min(100, usedBytes / limitBytes * 100) : 0;
+    var col = pct > 85 ? "#d9433a" : (pct > 60 ? "#d97706" : "#4f9d69");
+    return '<div style="height:10px;border-radius:6px;background:var(--line);overflow:hidden;margin-top:8px"><div style="height:100%;width:' + pct.toFixed(1) + '%;background:' + col + '"></div></div>' +
+      '<div style="font-size:12px;color:var(--muted);margin-top:5px">' + fmtBytes(usedBytes) + ' de ' + fmtBytes(limitBytes) + ' (' + pct.toFixed(1) + '%)</div>';
+  }
+  async function openStatus() {
+    el("statBody").innerHTML = '<p style="color:var(--muted)">Carregant…</p>';
+    el("statScrim").setAttribute("data-open", "true"); el("statSheet").setAttribute("data-open", "true");
+    try {
+      var s = await api("/api/status", "GET");
+      var catName = { dietes: "Dietes", gastos: "Gastos", bascules: "Bàscules", peatges: "Peatges", combustible: "Combustible" };
+      var catRows = (s.byCat || []).map(function (c) {
+        return '<div style="display:flex;justify-content:space-between;font-size:14px;padding:6px 0;border-bottom:1px solid var(--line)"><span>' + (catName[c.cat] || c.cat) + '</span><span style="font-family:var(--mono)">' + c.count + ' · ' + eur(c.sum) + '</span></div>';
+      }).join("");
+      el("statBody").innerHTML =
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">' +
+        statCard("Usuaris", s.users) +
+        statCard("Tiquets", s.tickets, s.withPhoto + " amb foto") +
+        statCard("Lectures de km", s.readings) +
+        statCard("Fotos", s.withPhoto) +
+        '</div>' +
+        '<label style="display:block;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--muted);margin-bottom:8px">Base de dades (Neon)</label>' +
+        statBar(s.dbBytes, s.dbLimitBytes) +
+        '<p style="font-size:12px;color:var(--muted);margin:6px 0 18px">Conté tiquets, usuaris i lectures (només text). El límit indicat és orientatiu de la capa gratuïta de Neon; mira el teu pla real a la consola de Neon.</p>' +
+        '<label style="display:block;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--muted);margin-bottom:8px">Fotos dels tiquets (Netlify Blobs)</label>' +
+        '<div style="font-family:var(--mono);font-size:22px;font-weight:700">' + fmtBytes(s.photoBytes) + (s.photosExact ? "" : " (aprox.)") + '</div>' +
+        '<p style="font-size:12px;color:var(--muted);margin:4px 0 18px">' + s.withPhoto + ' fotos.' + (s.photosExact ? "" : " " + s.photosUnknown + " són d\'abans d\'aquesta versió i s\'estimen; en tornar a desar-les o afegir-ne de noves, la mida serà exacta.") + ' Netlify Blobs té molt espai; és difícil que sigui un problema.</p>' +
+        '<label style="display:block;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--muted);margin-bottom:6px">Despeses per tipus</label>' +
+        (catRows || '<p style="color:var(--muted);font-size:13px">Cap despesa.</p>') +
+        '<button type="button" class="btn-ghost" id="statReload" style="width:100%;margin-top:16px">Actualitzar</button>';
+      var rb = el("statReload"); if (rb) rb.onclick = openStatus;
+      if (lang === "es") applyLang();
+    } catch (e) {
+      el("statBody").innerHTML = '<p style="color:#c0271e">No s\'ha pogut carregar l\'estat: ' + esc(e.message) + '</p>';
+    }
+  }
+  function closeStatus() { el("statScrim").removeAttribute("data-open"); el("statSheet").removeAttribute("data-open"); }
   el("menuBg").onclick = closeMenu;
 
   // ---------- Canviar la pròpia contrasenya ----------
@@ -1556,6 +1614,7 @@
   }
   function closeVeh() { el("vehScrim").removeAttribute("data-open"); el("vehSheet").removeAttribute("data-open"); }
   el("closeVeh").onclick = closeVeh; el("vehScrim").onclick = closeVeh;
+  el("closeStat").onclick = closeStatus; el("statScrim").onclick = closeStatus;
   function renderVeh() {
     var self = !vehTarget;
     var u = roster.filter(function (x) { return x.id === (vehTarget || me.id); })[0];
