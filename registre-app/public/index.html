@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- BUILD: foto-memoria · 2025-07-03 -->
 <html lang="ca">
 <head>
 <meta charset="utf-8">
@@ -280,10 +281,7 @@
       </div>
       <div class="field"><label for="place" id="placeLbl">Restaurant o empresa</label><input id="place" type="text" autocomplete="off" placeholder="Nom del comerç"></div>
       <div id="fuelWrap" style="display:none">
-        <div class="grid2">
-          <div class="field"><label for="litres">Litres (gasoil)</label><input id="litres" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0"></div>
-          <div class="field"><label for="fuelKm">Km del comptador</label><input id="fuelKm" type="number" inputmode="numeric" step="1" min="0" placeholder="opcional"></div>
-        </div>
+        <div class="field"><label for="litres">Litres (gasoil)</label><input id="litres" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0"></div>
         <div class="field"><label for="fuelPlate">Matrícula</label><input id="fuelPlate" type="text" list="platesList" autocomplete="off" placeholder="Matrícula" style="text-transform:uppercase"></div>
         <datalist id="platesList"></datalist>
       </div>
@@ -350,6 +348,7 @@
   <div class="sh-head"><h2>Apuntar km del cotxe</h2><button type="button" class="x" id="closeRead">Tanca</button></div>
   <div class="pad">
     <p style="font-size:13px;color:var(--muted);margin:0 0 12px" id="readInfo">Apunta la lectura del comptador de km del cotxe. Es demana un cop al mes.</p>
+    <div class="field" id="readUserWrap" style="display:none"><label for="readUser">Usuari</label><select id="readUser"></select></div>
     <div class="field amtwrap"><label for="readKm">Km del comptador</label><input id="readKm" type="number" inputmode="numeric" step="1" min="0" placeholder="0" style="font-family:var(--mono);font-size:24px;font-weight:600"></div>
     <div class="field"><label for="readDate">Data</label><input id="readDate" type="date"></div>
     <div class="field" id="readPlateWrap" style="display:none"><label for="readPlate">Matrícula</label><input id="readPlate" type="text" list="platesList" autocomplete="off" placeholder="Matrícula" style="text-transform:uppercase"></div>

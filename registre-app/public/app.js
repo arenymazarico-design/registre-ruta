@@ -10,7 +10,7 @@
   };
   var CAT_KEYS = Object.keys(CATS);
   var EXPENSE_KEYS = CAT_KEYS.filter(function (k) { return k !== "combustible"; });
-  var APP_VERSION = "2025-07-03 · sw-network-only";
+  var APP_VERSION = "2025-07-03 · foto-memoria";
 
   // ---------- Idioma (català per defecte / castellà) ----------
   var lang = localStorage.getItem("lang") || "ca";
@@ -118,6 +118,8 @@
     "Km actuals del comptador": "Km actuales del cuentakilómetros",
     "Acompanyant repetit": "Acompañante repetido",
     "Filtra per dates": "Filtra por fechas",
+    "📋 Apuntar lectura de km": "📋 Apuntar lectura de km",
+    "Apunta la lectura del comptador de km del cotxe.": "Apunta la lectura del cuentakilómetros del coche.",
     "Vehicle habitual:": "Vehículo habitual:", "Vehicle actiu": "Vehículo activo",
     "(substitució)": "(sustitución)", "↩︎ Tornar al vehicle habitual": "↩︎ Volver al vehículo habitual",
     "Matrícula (ex. 1234ABC)": "Matrícula (ej. 1234ABC)", "Cap vehicle": "Sin vehículo",
@@ -609,6 +611,7 @@
   el("photo").addEventListener("change", function (ev) {
     var file = ev.target.files && ev.target.files[0]; if (!file) return;
     compress(file, function (dataUrl) {
+      el("photo").value = "";
       if (!dataUrl) { toast("No s'ha pogut carregar la foto"); return; }
       if (retakeMode) { retakeMode = false; pendingPhoto = dataUrl; setThumb(dataUrl); return; }
       pendingPhoto = dataUrl; runExtraction(dataUrl);
@@ -633,9 +636,28 @@
     reader.readAsArrayBuffer(file);
   }
   function compress(file, cb) {
-    var reader = new FileReader();
-    reader.onload = function () { var img = new Image(); img.onload = function () { var max = 1100, w = img.width, h = img.height; if (w > h && w > max) { h = Math.round(h * max / w); w = max; } else if (h >= w && h > max) { w = Math.round(w * max / h); h = max; } var cv = document.createElement("canvas"); cv.width = w; cv.height = h; cv.getContext("2d").drawImage(img, 0, 0, w, h); cb(cv.toDataURL("image/jpeg", 0.62)); }; img.onerror = function () { cb(null); }; img.src = reader.result; };
-    reader.onerror = function () { cb(null); }; reader.readAsDataURL(file);
+    var MAX = 1100, Q = 0.6;
+    function scale(w, h) { if (w > h && w > MAX) { return [MAX, Math.round(h * MAX / w)]; } if (h >= w && h > MAX) { return [Math.round(w * MAX / h), MAX]; } return [w, h]; }
+    function toCanvas(src, w, h) { var d = scale(w, h); var cv = document.createElement("canvas"); cv.width = d[0]; cv.height = d[1]; cv.getContext("2d").drawImage(src, 0, 0, d[0], d[1]); var out = null; try { out = cv.toDataURL("image/jpeg", Q); } catch (e) { out = null; } cv.width = cv.height = 0; return out; }
+    function legacy() {
+      var reader = new FileReader();
+      reader.onload = function () {
+        var img = new Image();
+        img.onload = function () { cb(toCanvas(img, img.width, img.height)); img.src = ""; };
+        img.onerror = function () { cb(null); };
+        img.src = reader.result;
+      };
+      reader.onerror = function () { cb(null); };
+      reader.readAsDataURL(file);
+    }
+    // Via preferida: descodifica de forma eficient i allibera la memòria de seguida.
+    if (window.createImageBitmap) {
+      window.createImageBitmap(file).then(function (bmp) {
+        var out = toCanvas(bmp, bmp.width, bmp.height);
+        if (bmp.close) bmp.close();
+        cb(out);
+      }).catch(function () { legacy(); });
+    } else legacy();
   }
   async function runExtraction(dataUrl) {
     el("extractImg").src = dataUrl; el("extract").setAttribute("data-open", "true");
@@ -709,7 +731,7 @@
     el("ticket").value = parsed ? (isFactura ? (parsed.invoice_number || parsed.ticket_number || "") : (parsed.ticket_number || parsed.invoice_number || "")) : "";
     el("cif").value = isFactura ? companyCif : ""; setNumberMode(isFactura);
     el("place").value = (parsed && parsed.business_name) ? parsed.business_name : "";
-    el("litres").value = (parsed && parsed.litres != null) ? parsed.litres : ""; el("fuelKm").value = "";
+    el("litres").value = (parsed && parsed.litres != null) ? parsed.litres : "";
     el("fuelPlate").value = isFuel ? myActivePlate() : "";
     el("date").value = (parsed && parsed.date && /^\d{4}-\d{2}-\d{2}$/.test(parsed.date)) ? parsed.date : todayStr();
     el("compCount").value = 0; el("compList").innerHTML = ""; el("notes").value = ""; setThumb(pendingPhoto);
@@ -722,7 +744,7 @@
     el("editId").value = e.id; selectedCat = e.cat; setEntryMode(e.cat === "combustible" ? "combustible" : "despesa");
     el("amount").value = e.amount; el("ticket").value = e.ticket || ""; el("place").value = e.place || "";
     el("cif").value = e.cif || ""; setNumberMode(!!e.cif);
-    el("litres").value = (e.litres != null) ? e.litres : ""; el("fuelKm").value = ""; el("fuelPlate").value = e.plate || "";
+    el("litres").value = (e.litres != null) ? e.litres : ""; el("fuelPlate").value = e.plate || "";
     if (e.cat === "combustible") fillPlatesDatalist(e.userId);
     el("date").value = e.date; setCompanionsFromString(e.companions || ""); el("notes").value = e.notes || "";
     pendingPhoto = e.photo || null; setThumb(pendingPhoto);
@@ -731,7 +753,7 @@
   }
 
   function setLock(locked) {
-    ["amount", "ticket", "date", "place", "compCount", "notes", "litres", "fuelKm", "fuelPlate"].forEach(function (id) { el(id).disabled = locked; });
+    ["amount", "ticket", "date", "place", "compCount", "notes", "litres", "fuelPlate"].forEach(function (id) { el(id).disabled = locked; });
     el("compList").querySelectorAll(".compName").forEach(function (i) { i.disabled = locked; });
     document.querySelectorAll('input[name=cat]').forEach(function (r) { r.disabled = locked; });
     el("modeToggle").querySelectorAll(".mbtn").forEach(function (b) { b.disabled = locked; });
@@ -848,10 +870,6 @@
       if (id) { payload.id = id; res = await api("/api/tickets", "PUT", payload); }
       else res = await api("/api/tickets", "POST", payload);
       await loadEntries();
-      if (selectedCat === "combustible") {
-        var fkm = el("fuelKm").value;
-        if (fkm !== "" && !isNaN(Number(fkm))) { try { await api("/api/readings", "POST", { km: Number(fkm), date: payload.date }); await loadReadings(); } catch (e) { } }
-      }
       pendingPhoto = null; closeSheet(); render(); if (el("kmSheet").getAttribute("data-open") === "true") renderKm();
       var okMsg = id ? "Registre actualitzat" : (res && res.emailed ? "Desat i enviat per correu" : "Desat" + (res && res.emailReason ? " — correu no enviat: " + res.emailReason : ""));
       toast(okMsg);
@@ -1334,7 +1352,8 @@
     if (lang === "es") applyLang();
   }
   function renderKm() {
-    var addBtns = '<div class="actions" style="margin-bottom:12px"><button type="button" class="btn-primary" id="fuAddPhoto"><span class="cam">📷</span> Repostatge (foto)</button><button type="button" class="btn-ghost" id="fuAddManual" style="flex:0 0 auto;width:auto;padding:14px 18px">Sense foto</button></div>';
+    var addBtns = '<div class="actions" style="margin-bottom:12px"><button type="button" class="btn-primary" id="fuAddPhoto"><span class="cam">📷</span> Repostatge (foto)</button><button type="button" class="btn-ghost" id="fuAddManual" style="flex:0 0 auto;width:auto;padding:14px 18px">Sense foto</button></div>' +
+      '<button type="button" class="btn-ghost" id="kmAddRead" style="width:100%;margin-bottom:12px">📋 Apuntar lectura de km</button>';
     var dateFilter =
       '<label style="display:block;font-size:12px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--muted);margin:2px 0 6px">Filtra per dates</label>' +
       '<div class="grid2" style="margin-top:2px"><div class="field"><label for="kmFrom">Des de</label><input id="kmFrom" type="date" value="' + esc(km.from) + '"></div>' +
@@ -1360,6 +1379,7 @@
 
     el("fuAddPhoto").onclick = function () { pendingFuel = true; retakeMode = false; pendingPhoto = null; closeKm(); el("photo").value = ""; el("photo").click(); };
     el("fuAddManual").onclick = function () { pendingFuel = true; pendingPhoto = null; closeKm(); openSheetNew(null, false); };
+    el("kmAddRead").onclick = function () { openRead(); };
     var kp = el("kmPlate"); if (kp) kp.onchange = function () { km.plate = kp.value; renderKmReport(); renderKmLists(); };
 
     var kf = el("kmFrom"); if (kf) kf.onchange = function () { km.from = kf.value; renderKmReport(); renderKmLists(); };
@@ -1461,13 +1481,25 @@
   function openRead() {
     readEditId = null;
     var today = todayStr(); el("readDate").value = today;
-    el("readInfo").textContent = "Apunta la lectura del comptador de km del cotxe. Es demana un cop al mes.";
+    el("readInfo").textContent = "Apunta la lectura del comptador de km del cotxe.";
     el("readDel").style.display = "none";
-    var rpw = el("readPlateWrap"); if (rpw) rpw.style.display = "none"; var rp = el("readPlate"); if (rp) rp.value = myActivePlate();
-    var ym = today.slice(0, 7), ap = myActivePlate();
-    var ex = readings.filter(function (r) { return r.userId === me.id && r.ym === ym && (r.plate || "") === ap; })[0];
-    el("readKm").value = ex ? ex.km : "";
-    fillPlatesDatalist();
+    if (admin) {
+      var uw = el("readUserWrap"); if (uw) uw.style.display = "block";
+      var sel = el("readUser");
+      if (sel) { sel.innerHTML = roster.slice().sort(function (a, b) { return a.name.localeCompare(b.name); }).map(function (u) { return '<option value="' + u.id + '"' + (u.id === me.id ? " selected" : "") + '>' + esc(u.name) + '</option>'; }).join(""); sel.onchange = function () { fillPlatesDatalist(sel.value); }; }
+      var rpw = el("readPlateWrap"); if (rpw) rpw.style.display = "block";
+      var rp = el("readPlate"); if (rp) rp.value = "";
+      fillPlatesDatalist(me.id);
+      el("readKm").value = "";
+    } else {
+      var uw2 = el("readUserWrap"); if (uw2) uw2.style.display = "none";
+      var rpw2 = el("readPlateWrap"); if (rpw2) rpw2.style.display = "none";
+      var rp2 = el("readPlate"); if (rp2) rp2.value = myActivePlate();
+      var ym = today.slice(0, 7), ap = myActivePlate();
+      var ex = readings.filter(function (r) { return r.userId === me.id && r.ym === ym && (r.plate || "") === ap; })[0];
+      el("readKm").value = ex ? ex.km : "";
+      fillPlatesDatalist(me.id);
+    }
     el("readScrim").setAttribute("data-open", "true"); el("readSheet").setAttribute("data-open", "true");
   }
   function openReadEdit(id) {
@@ -1476,6 +1508,7 @@
     el("readKm").value = r.km; el("readDate").value = r.date;
     el("readInfo").textContent = "Lectura" + (admin ? " · " + r.user : "");
     el("readDel").style.display = "";
+    var ruw = el("readUserWrap"); if (ruw) ruw.style.display = "none";
     var rp2 = el("readPlate"); if (rp2) rp2.value = r.plate || "";
     var rpw2 = el("readPlateWrap"); if (rpw2) rpw2.style.display = admin ? "block" : "none";
     fillPlatesDatalist(r.userId);
@@ -1490,6 +1523,10 @@
       var payload = { km: Number(v), date: el("readDate").value || todayStr() };
       if (readEditId) payload.id = readEditId;
       if (readEditId && admin && el("readPlate")) payload.plate = el("readPlate").value.trim().toUpperCase();
+      if (!readEditId && admin) {
+        if (el("readUser")) payload.forUserId = el("readUser").value;
+        if (el("readPlate")) payload.plate = el("readPlate").value.trim().toUpperCase();
+      }
       await api("/api/readings", "POST", payload); await loadReadings(); closeRead(); hideKmReminder();
       if (el("kmSheet").getAttribute("data-open") === "true") renderKm();
       toast("Km desats");
