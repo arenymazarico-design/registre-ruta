@@ -10,7 +10,7 @@
   };
   var CAT_KEYS = Object.keys(CATS);
   var EXPENSE_KEYS = CAT_KEYS.filter(function (k) { return k !== "combustible"; });
-  var APP_VERSION = "2025-07-03 · adblue-auto";
+  var APP_VERSION = "2025-07-03 · restaurants-bloquejats";
 
   // ---------- Idioma (català per defecte / castellà) ----------
   var lang = localStorage.getItem("lang") || "ca";
@@ -118,6 +118,7 @@
     "Km actuals del comptador": "Km actuales del cuentakilómetros",
     "Acompanyant repetit": "Acompañante repetido",
     "Filtra per dates": "Filtra por fechas",
+    "Restaurants que facturen a final de mes (bloquejats)": "Restaurantes que facturan a final de mes (bloqueados)",
     "Ho ha pagat l'usuari": "Lo ha pagado el usuario", "Gasoil": "Gasoil", "AdBlue": "AdBlue",
     "Per defecte ho paga l'empresa. Si ho marca, el tiquet passa a Gastos (per reemborsar), però els litres segueixen comptant per al consum.": "Por defecto lo paga la empresa. Si lo marca, el ticket pasa a Gastos (para reembolsar), pero los litros siguen contando para el consumo.",
     "Estat del sistema": "Estado del sistema", "Base de dades (Neon)": "Base de datos (Neon)",
@@ -196,6 +197,22 @@
   var paidByUser = false;
   function isFuel(e) { return e.cat === "combustible" || !!e.fuelType; }
   function fuelTypeOf(e) { return e.fuelType || (e.cat === "combustible" ? "gasoil" : ""); }
+  function updateBlockNote() {
+    var n = el("blockNote"); if (!n) return;
+    var m = blockedMatch(el("place").value);
+    if (m) { n.style.display = "block"; n.innerHTML = '<div class="latenote">🚫 <b>' + esc(m) + '</b> envia factura a l\'empresa a final de mes. Aquest tiquet no cal registrar-lo i no es podrà desar.</div>'; }
+    else { n.style.display = "none"; n.innerHTML = ""; }
+  }
+  function blockedMatch(place) {
+    var p = String(place || "").trim().toLowerCase();
+    if (!p) return null;
+    var list = cfg.blockedPlaces || [];
+    for (var i = 0; i < list.length; i++) {
+      var b = String(list[i]).trim().toLowerCase();
+      if (b && (p.indexOf(b) >= 0 || b.indexOf(p) >= 0)) return list[i];
+    }
+    return null;
+  }
   var saving = false;
 
   // ---------- API ----------
@@ -229,6 +246,9 @@
   function normalizeCfg(c) {
     cfg.email = c.email || ""; cfg.color = c.color || ""; cfg.logo = c.logo || ""; cfg.cif = c.cif || "";
     cfg.menuMax = (c.menuMax != null && !isNaN(Number(c.menuMax))) ? Number(c.menuMax) : 0;
+    var bp = [];
+    if (c.blockedPlaces) { try { bp = JSON.parse(c.blockedPlaces); } catch (e) { bp = String(c.blockedPlaces).split(/[\n,;]+/); } }
+    cfg.blockedPlaces = (bp || []).map(function (x) { return String(x).trim(); }).filter(Boolean);
     var names = [];
     if (c.names) { try { names = JSON.parse(c.names); } catch (e) { names = String(c.names).split(/[\n,;]+/); } }
     cfg.names = (names || []).map(function (x) { return String(x).trim(); }).filter(Boolean);
@@ -616,6 +636,8 @@
       '<p style="font-size:12px;color:var(--muted);margin:-4px 0 12px">Si en llegir un document hi ha CIF, es tractarà com a factura i s\'agafarà el número de factura.</p>' +
       '<div class="field"><label for="cMenuMax">Import màxim per persona i menú (€)</label><input id="cMenuMax" type="number" inputmode="decimal" step="0.01" min="0" placeholder="Ex. 12" value="' + (cfg.menuMax ? esc(String(cfg.menuMax)) : "") + '"></div>' +
       '<p style="font-size:12px;color:var(--muted);margin:-4px 0 12px">A l\'Excel de consulta, per a cada dieta es divideix l\'import entre els acompanyants + la persona que l\'entra; si la mitjana per persona supera aquest import, la fila es marca en vermell. No canvia cap import. Deixa-ho a 0 per no comprovar res.</p>' +
+      '<div class="field"><label for="cBlocked">Restaurants que facturen a final de mes (bloquejats)</label><textarea id="cBlocked" rows="4" placeholder="Un nom per línia">' + esc((cfg.blockedPlaces || []).join("\n")) + '</textarea></div>' +
+      '<p style="font-size:12px;color:var(--muted);margin:-4px 0 14px">Si el nom del comerç d\'un tiquet coincideix amb algun d\'aquests, no es podrà desar: aquests restaurants ja envien factura a l\'empresa a final de mes.</p>' +
       '<label style="display:block;font-size:12px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--muted);margin-bottom:6px">Color de l\'app</label>' +
       '<div class="swatches">' + swatches + '<input id="cColor" type="color" value="' + esc(cfgColorTmp) + '" style="width:40px;height:34px;border:1px solid var(--line);border-radius:8px;background:none;cursor:pointer;padding:2px"></div>' +
       '<label style="display:block;font-size:12px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--muted);margin:2px 0 6px">Logo</label>' +
@@ -664,9 +686,10 @@
     cfg.email = el("cEmail").value.trim(); cfg.color = cfgColorTmp || ""; cfg.logo = cfgLogoTmp || "";
     cfg.cif = el("cCif").value.trim();
     var mm = parseFloat(el("cMenuMax").value); cfg.menuMax = (!isNaN(mm) && mm > 0) ? mm : 0;
+    cfg.blockedPlaces = el("cBlocked").value.split("\n").map(function (x) { return x.trim(); }).filter(Boolean);
     cfg.names = el("cNames").value.split("\n").map(function (x) { return x.trim(); }).filter(Boolean);
     try {
-      await api("/api/config", "POST", { email: cfg.email, color: cfg.color, logo: cfg.logo, cif: cfg.cif, names: JSON.stringify(cfg.names), menuMax: cfg.menuMax });
+      await api("/api/config", "POST", { email: cfg.email, color: cfg.color, logo: cfg.logo, cif: cfg.cif, names: JSON.stringify(cfg.names), menuMax: cfg.menuMax, blockedPlaces: JSON.stringify(cfg.blockedPlaces) });
       applyTheme(); fillNamesDatalist(); closeCfg(); render(); toast("Configuració desada");
     } catch (e) { toast(e.message); }
   }
@@ -801,7 +824,7 @@
     var isFactura = !!(parsed && companyCif && (parsed.is_invoice === true || (parsed.cif && norm(parsed.cif) === norm(companyCif))));
     el("ticket").value = parsed ? (isFactura ? (parsed.invoice_number || parsed.ticket_number || "") : (parsed.ticket_number || parsed.invoice_number || "")) : "";
     el("cif").value = isFactura ? companyCif : ""; setNumberMode(isFactura);
-    el("place").value = (parsed && parsed.business_name) ? parsed.business_name : "";
+    el("place").value = (parsed && parsed.business_name) ? parsed.business_name : ""; updateBlockNote();
     el("litres").value = (parsed && parsed.litres != null) ? parsed.litres : "";
     el("fuelPlate").value = wantFuel ? myActivePlate() : "";
     el("date").value = (parsed && parsed.date && /^\d{4}-\d{2}-\d{2}$/.test(parsed.date)) ? parsed.date : todayStr();
@@ -815,7 +838,7 @@
     el("editId").value = e.id; selectedCat = isFuel(e) ? "combustible" : e.cat;
     fuelType = fuelTypeOf(e) || "gasoil"; paidByUser = !!e.paidByUser;
     setEntryMode(isFuel(e) ? "combustible" : "despesa");
-    el("amount").value = e.amount; el("ticket").value = e.ticket || ""; el("place").value = e.place || "";
+    el("amount").value = e.amount; el("ticket").value = e.ticket || ""; el("place").value = e.place || ""; updateBlockNote();
     el("cif").value = e.cif || ""; setNumberMode(!!e.cif);
     el("litres").value = (e.litres != null) ? e.litres : ""; el("fuelPlate").value = e.plate || "";
     if (isFuel(e)) fillPlatesDatalist(e.userId);
@@ -906,6 +929,7 @@
   el("closeSheet").onclick = closeSheet; el("scrim").onclick = closeSheet;
   el("retakeBtn").onclick = function () { retakeMode = true; el("photo").value = ""; el("photo").click(); };
   el("compCount").addEventListener("input", function () { renderCompRows(parseInt(el("compCount").value, 10) || 0, readCompValues()); });
+  el("place").addEventListener("input", updateBlockNote);
   el("modeToggle").querySelectorAll(".mbtn").forEach(function (b) { b.onclick = function () { setEntryMode(b.getAttribute("data-m")); }; });
   el("fuelTypeToggle").querySelectorAll(".mbtn").forEach(function (b) { b.onclick = function () { fuelType = b.getAttribute("data-ft"); setFuelTypeUI(); }; });
   el("paidByUser").addEventListener("change", function () { paidByUser = el("paidByUser").checked; });
@@ -919,6 +943,8 @@
     var amount = parseFloat(amtStr);
     if (fuelMode) { if (amtStr.trim() === "" || isNaN(amount)) amount = 0; }
     if (isNaN(amount) || amount < 0) { toast("Posa un import vàlid"); return; }
+    var blk = blockedMatch(el("place").value);
+    if (blk) { toast("\"" + blk + "\" envia factura a l'empresa a final de mes. No cal registrar aquest tiquet i no es desa.", { error: true, cross: true, ms: 8000 }); return; }
     var id = el("editId").value;
     // Si és repostatge i l'ha pagat l'usuari, va a Gastos (per reemborsar), però compta per al km.
     var outCat = fuelMode ? (paidByUser ? "gastos" : "combustible") : selectedCat;
