@@ -10,7 +10,7 @@
   };
   var CAT_KEYS = Object.keys(CATS);
   var EXPENSE_KEYS = CAT_KEYS.filter(function (k) { return k !== "combustible"; });
-  var APP_VERSION = "2025-07-03 · estat-sistema";
+  var APP_VERSION = "2025-07-03 · adblue-auto";
 
   // ---------- Idioma (català per defecte / castellà) ----------
   var lang = localStorage.getItem("lang") || "ca";
@@ -118,6 +118,8 @@
     "Km actuals del comptador": "Km actuales del cuentakilómetros",
     "Acompanyant repetit": "Acompañante repetido",
     "Filtra per dates": "Filtra por fechas",
+    "Ho ha pagat l'usuari": "Lo ha pagado el usuario", "Gasoil": "Gasoil", "AdBlue": "AdBlue",
+    "Per defecte ho paga l'empresa. Si ho marca, el tiquet passa a Gastos (per reemborsar), però els litres segueixen comptant per al consum.": "Por defecto lo paga la empresa. Si lo marca, el ticket pasa a Gastos (para reembolsar), pero los litros siguen contando para el consumo.",
     "Estat del sistema": "Estado del sistema", "Base de dades (Neon)": "Base de datos (Neon)",
     "Fotos dels tiquets (Netlify Blobs)": "Fotos de los tickets (Netlify Blobs)", "Despeses per tipus": "Gastos por tipo",
     "Usuaris": "Usuarios", "Tiquets": "Tickets", "Lectures de km": "Lecturas de km", "Fotos": "Fotos", "Actualitzar": "Actualizar", "Carregant…": "Cargando…",
@@ -190,6 +192,10 @@
   var loginTarget = null;
   var noUsers = false;
   var selectedCat = "dietes";
+  var fuelType = "gasoil";
+  var paidByUser = false;
+  function isFuel(e) { return e.cat === "combustible" || !!e.fuelType; }
+  function fuelTypeOf(e) { return e.fuelType || (e.cat === "combustible" ? "gasoil" : ""); }
   var saving = false;
 
   // ---------- API ----------
@@ -742,12 +748,18 @@
     el("catpick").style.display = (mode === "combustible") ? "none" : "grid";
     toggleCompanions();
   }
+  function setFuelTypeUI() {
+    var ft = el("fuelTypeToggle"); if (ft) ft.querySelectorAll(".mbtn").forEach(function (b) { b.setAttribute("data-active", b.getAttribute("data-ft") === fuelType); });
+  }
   function toggleCompanions() {
     el("compWrap").style.display = (selectedCat === "dietes") ? "block" : "none";
     var fuel = (selectedCat === "combustible");
     el("fuelWrap").style.display = fuel ? "block" : "none";
     el("placeLbl").textContent = fuel ? "Gasolinera" : "Restaurant o empresa";
     el("place").placeholder = fuel ? "Nom de la gasolinera" : "Nom del comerç";
+    el("amount").required = !fuel; // en repostatge l'import és opcional (l'important són els litres)
+    var pu = el("paidByUser"); if (pu) pu.checked = paidByUser;
+    setFuelTypeUI();
     if (fuel) fillPlatesDatalist();
   }
   function fillPlatesDatalist(userId) {
@@ -778,10 +790,11 @@
   var pendingFuel = false;
   function openSheetNew(parsed, fromAI) {
     el("entryForm").reset(); el("editId").value = ""; el("delBtn").style.display = "none";
-    var isFuel = pendingFuel || (parsed && parsed.category === "combustible");
-    el("sheetTitle").textContent = isFuel ? "Repostatge" : "Revisar tiquet"; el("aiHint").style.display = fromAI ? "flex" : "none";
-    selectedCat = isFuel ? "combustible" : ((parsed && CATS[parsed.category] && parsed.category !== "combustible") ? parsed.category : "dietes");
-    setEntryMode(isFuel ? "combustible" : "despesa");
+    var wantFuel = pendingFuel || (parsed && (parsed.category === "combustible" || parsed.fuel_type === "gasoil" || parsed.fuel_type === "adblue"));
+    el("sheetTitle").textContent = wantFuel ? "Repostatge" : "Revisar tiquet"; el("aiHint").style.display = fromAI ? "flex" : "none";
+    fuelType = (parsed && (parsed.fuel_type === "adblue" || parsed.fuel_type === "gasoil")) ? parsed.fuel_type : "gasoil"; paidByUser = false;
+    selectedCat = wantFuel ? "combustible" : ((parsed && CATS[parsed.category] && parsed.category !== "combustible") ? parsed.category : "dietes");
+    setEntryMode(wantFuel ? "combustible" : "despesa");
     el("amount").value = (parsed && parsed.amount != null) ? parsed.amount : "";
     var norm = function (s) { return String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, ""); };
     var companyCif = cfg.cif || "";
@@ -790,7 +803,7 @@
     el("cif").value = isFactura ? companyCif : ""; setNumberMode(isFactura);
     el("place").value = (parsed && parsed.business_name) ? parsed.business_name : "";
     el("litres").value = (parsed && parsed.litres != null) ? parsed.litres : "";
-    el("fuelPlate").value = isFuel ? myActivePlate() : "";
+    el("fuelPlate").value = wantFuel ? myActivePlate() : "";
     el("date").value = (parsed && parsed.date && /^\d{4}-\d{2}-\d{2}$/.test(parsed.date)) ? parsed.date : todayStr();
     el("compCount").value = 0; el("compList").innerHTML = ""; el("notes").value = ""; setThumb(pendingPhoto);
     el("acctRow").innerHTML = ""; el("lateRow").innerHTML = ""; el("compRow").innerHTML = ""; setLock(false); openSheet_();
@@ -799,11 +812,13 @@
   function openSheet(id) {
     var e = entries.filter(function (x) { return x.id === id; })[0]; if (!e) return;
     el("entryForm").reset(); el("aiHint").style.display = "none"; el("sheetTitle").textContent = "Editar registre";
-    el("editId").value = e.id; selectedCat = e.cat; setEntryMode(e.cat === "combustible" ? "combustible" : "despesa");
+    el("editId").value = e.id; selectedCat = isFuel(e) ? "combustible" : e.cat;
+    fuelType = fuelTypeOf(e) || "gasoil"; paidByUser = !!e.paidByUser;
+    setEntryMode(isFuel(e) ? "combustible" : "despesa");
     el("amount").value = e.amount; el("ticket").value = e.ticket || ""; el("place").value = e.place || "";
     el("cif").value = e.cif || ""; setNumberMode(!!e.cif);
     el("litres").value = (e.litres != null) ? e.litres : ""; el("fuelPlate").value = e.plate || "";
-    if (e.cat === "combustible") fillPlatesDatalist(e.userId);
+    if (isFuel(e)) fillPlatesDatalist(e.userId);
     el("date").value = e.date; setCompanionsFromString(e.companions || ""); el("notes").value = e.notes || "";
     pendingPhoto = e.photo || null; setThumb(pendingPhoto);
     el("delBtn").style.display = (admin || e.userId === me.id) ? "block" : "none";
@@ -892,16 +907,23 @@
   el("retakeBtn").onclick = function () { retakeMode = true; el("photo").value = ""; el("photo").click(); };
   el("compCount").addEventListener("input", function () { renderCompRows(parseInt(el("compCount").value, 10) || 0, readCompValues()); });
   el("modeToggle").querySelectorAll(".mbtn").forEach(function (b) { b.onclick = function () { setEntryMode(b.getAttribute("data-m")); }; });
+  el("fuelTypeToggle").querySelectorAll(".mbtn").forEach(function (b) { b.onclick = function () { fuelType = b.getAttribute("data-ft"); setFuelTypeUI(); }; });
+  el("paidByUser").addEventListener("change", function () { paidByUser = el("paidByUser").checked; });
   el("thumbImg").onclick = function () { if (pendingPhoto) openImg(pendingPhoto); };
 
   el("entryForm").addEventListener("submit", async function (ev) {
     ev.preventDefault();
     if (saving) return;
-    var amount = parseFloat(String(el("amount").value).replace(",", "."));
+    var fuelMode = (selectedCat === "combustible");
+    var amtStr = String(el("amount").value).replace(",", ".");
+    var amount = parseFloat(amtStr);
+    if (fuelMode) { if (amtStr.trim() === "" || isNaN(amount)) amount = 0; }
     if (isNaN(amount) || amount < 0) { toast("Posa un import vàlid"); return; }
     var id = el("editId").value;
+    // Si és repostatge i l'ha pagat l'usuari, va a Gastos (per reemborsar), però compta per al km.
+    var outCat = fuelMode ? (paidByUser ? "gastos" : "combustible") : selectedCat;
     var payload = {
-      cat: selectedCat, amount: Math.round(amount * 100) / 100,
+      cat: outCat, amount: Math.round(amount * 100) / 100,
       ticket_no: el("ticket").value.trim(), place: el("place").value.trim(),
       cif: el("cif").value.trim(),
       date: el("date").value || todayStr(),
@@ -909,7 +931,7 @@
       notes: el("notes").value.trim(),
       litres: el("litres").value
     };
-    if (selectedCat === "combustible") payload.plate = el("fuelPlate").value.trim().toUpperCase();
+    if (fuelMode) { payload.plate = el("fuelPlate").value.trim().toUpperCase(); payload.fuelType = fuelType; payload.paidByUser = paidByUser; }
     // foto nova per pujar (només si és dataURL, no una URL existent)
     if (pendingPhoto && pendingPhoto.indexOf("data:") === 0) payload.photoBase64 = pendingPhoto.split(",")[1];
 
@@ -1118,8 +1140,8 @@
       var row = xlsxRow(ws, ctx, hr + 1 + ri, r, header, euroCol);
       var fl = rowFlags && rowFlags[ri];
       if (fl) {
-        var bg = (fl === "orange") ? "FFFFF0D8" : "FFFCE4E2";
-        var fg = (fl === "orange") ? "FFA5670A" : "FFC0271E";
+        var bg = (fl === "orange") ? "FFFFF0D8" : (fl === "violet" ? "FFEEE4F6" : "FFFCE4E2");
+        var fg = (fl === "orange") ? "FFA5670A" : (fl === "violet" ? "FF6B3EA3" : "FFC0271E");
         for (var ci = 1; ci <= header.length; ci++) { row.getCell(ci).fill = { type: "pattern", pattern: "solid", fgColor: { argb: bg } }; }
         if (euroCol) { var ec = row.getCell(euroCol); ec.font = { bold: true, color: { argb: fg } }; }
       }
@@ -1134,22 +1156,23 @@
   }
   // Full agrupat per matrícula amb subtotals i total general (per al km).
   function xlsxKmUserSheet(ctx, name, title, groups) {
-    var header = ["Data", "Gasolinera", "Litres", "Import"];
+    var header = ["Data", "Tipus", "Gasolinera", "Litres", "Import", "Pagat"];
     var ws = ctx.wb.addWorksheet(name);
-    ws.columns = [{ width: 13 }, { width: 42 }, { width: 12 }, { width: 14 }];
+    ws.columns = [{ width: 13 }, { width: 12 }, { width: 40 }, { width: 12 }, { width: 14 }, { width: 12 }];
     var hr = xlsxTop(ws, ctx, header, title, true);
+    var LIT = 4, IMP = 5;
     var ri = hr + 1, gL = 0, gC = 0, gKm = 0;
     function bandRow(r, txt, litres, cost, argb, top) {
-      ws.mergeCells(r, 1, r, 2); var c1 = ws.getCell(r, 1); c1.value = txt; c1.font = { bold: true };
+      ws.mergeCells(r, 1, r, 3); var c1 = ws.getCell(r, 1); c1.value = txt; c1.font = { bold: true };
       for (var ci = 1; ci <= header.length; ci++) { var c = ws.getCell(r, ci); c.font = { bold: true }; c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: argb } }; c.border = top ? { top: { style: "medium" }, bottom: ctx.thin, left: ctx.thin, right: ctx.thin } : ctx.borderAll; }
-      if (litres != null) { ws.getCell(r, 3).value = Number(litres.toFixed(2)); ws.getCell(r, 3).alignment = { horizontal: "right" }; }
-      if (cost != null) { ws.getCell(r, 4).value = Number(cost.toFixed(2)); ws.getCell(r, 4).numFmt = '#,##0.00" €"'; ws.getCell(r, 4).alignment = { horizontal: "right" }; }
+      if (litres != null) { ws.getCell(r, LIT).value = Number(litres.toFixed(2)); ws.getCell(r, LIT).alignment = { horizontal: "right" }; }
+      if (cost != null) { ws.getCell(r, IMP).value = Number(cost.toFixed(2)); ws.getCell(r, IMP).numFmt = '#,##0.00" €"'; ws.getCell(r, IMP).alignment = { horizontal: "right" }; }
     }
     groups.forEach(function (g) {
       ws.mergeCells(ri, 1, ri, header.length); var gc = ws.getCell(ri, 1); gc.value = "Matrícula: " + (g.label || "(sense matrícula)"); gc.font = { bold: true };
       for (var ci = 1; ci <= header.length; ci++) { var c = ws.getCell(ri, ci); c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEDEAE1" } }; c.border = ctx.borderAll; c.font = { bold: true }; }
       ri++;
-      g.rows.forEach(function (r) { xlsxRow(ws, ctx, ri, r, header, 4); ri++; });
+      g.rows.forEach(function (row) { var rr = xlsxRow(ws, ctx, ri, row.cells, header, IMP); if (row.paid) { for (var ci = 1; ci <= header.length; ci++) rr.getCell(ci).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEEE4F6" } }; } ri++; });
       bandRow(ri, "Subtotal · Km: " + fmt(g.km, 0) + " · " + fmt(g.km > 0 ? g.litres / g.km * 100 : 0, 2) + " L/100km", g.litres, g.cost, "FFF6F4EE", false);
       ri += 2;
       gL += g.litres; gC += g.cost; gKm += g.km;
@@ -1276,18 +1299,19 @@
     return total;
   }
   function scopeUsers() { if (!admin) return [me.id]; if (km.users.length) return km.users.slice(); return roster.map(function (u) { return u.id; }); }
-  function fuelInRange(scope, a, b) { return entries.filter(function (e) { return e.cat === "combustible" && scope.indexOf(e.userId) >= 0 && e.date >= a && e.date <= b && (!km.plate || (e.plate || "") === km.plate); }); }
+  function fuelInRange(scope, a, b) { return entries.filter(function (e) { return isFuel(e) && scope.indexOf(e.userId) >= 0 && e.date >= a && e.date <= b && (!km.plate || (e.plate || "") === km.plate); }); }
   function platesInScope() {
     var scope = scopeUsers(), set = {}, out = [];
-    entries.forEach(function (e) { if (e.cat === "combustible" && scope.indexOf(e.userId) >= 0) { var p = e.plate || ""; if (!(p in set)) { set[p] = 1; out.push(p); } } });
+    entries.forEach(function (e) { if (isFuel(e) && scope.indexOf(e.userId) >= 0) { var p = e.plate || ""; if (!(p in set)) { set[p] = 1; out.push(p); } } });
     readings.forEach(function (r) { if (scope.indexOf(r.userId) >= 0) { var p = r.plate || ""; if (!(p in set)) { set[p] = 1; out.push(p); } } });
     return out.sort();
   }
-  function litresSum(l) { return l.reduce(function (s, e) { return s + (e.litres || 0); }, 0); }
+  function litresSum(l) { return l.reduce(function (s, e) { return s + (fuelTypeOf(e) === "gasoil" ? (e.litres || 0) : 0); }, 0); }
+  function adblueSum(l) { return l.reduce(function (s, e) { return s + (fuelTypeOf(e) === "adblue" ? (e.litres || 0) : 0); }, 0); }
   function costSum(l) { return l.reduce(function (s, e) { return s + (e.amount || 0); }, 0); }
   function rangeBounds() {
     var scope = scopeUsers(), dates = [], today = todayStr();
-    entries.forEach(function (e) { if (e.cat === "combustible" && scope.indexOf(e.userId) >= 0) dates.push(e.date); });
+    entries.forEach(function (e) { if (isFuel(e) && scope.indexOf(e.userId) >= 0) dates.push(e.date); });
     readings.forEach(function (r) { if (scope.indexOf(r.userId) >= 0) dates.push(r.date); });
     var minD0 = dates.length ? dates.reduce(function (a, b) { return a < b ? a : b; }) : today;
     return { from: km.from || minD0, to: km.to || today };
@@ -1386,9 +1410,12 @@
   }
   function renderKmReport() { el("kmReport").innerHTML = (admin && km.group) ? reportGrouped() : reportDetailed(); if (lang === "es") applyLang(); }
   function kmFuelRow(e) {
-    return '<div class="fuelrow" data-id="' + e.id + '" style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 12px;border:1px solid var(--line);border-radius:11px;margin-bottom:7px;cursor:pointer">' +
-      '<div style="min-width:0"><b style="font-size:14px">' + esc(e.place || "Gasolinera") + '</b><div style="font-size:12px;color:var(--muted)">' + e.date + (admin ? " · " + esc(e.user) : "") + (e.plate ? " · " + esc(e.plate) : "") + '</div></div>' +
-      '<div style="text-align:right;white-space:nowrap"><div style="font-family:var(--mono);font-weight:700">' + (e.litres != null ? fmt(e.litres, 2) + " L" : "") + '</div><div style="font-size:12px;color:var(--muted)">' + eur(e.amount) + '</div></div></div>';
+    var ft = fuelTypeOf(e);
+    var typeTag = ft === "adblue" ? ' · AdBlue' : '';
+    var paidTag = e.paidByUser ? '<span style="display:inline-block;background:#efe4f6;color:#6b3ea3;font-size:11px;font-weight:800;padding:1px 7px;border-radius:6px;margin-left:6px">pagat usuari</span>' : '';
+    return '<div class="fuelrow" data-id="' + e.id + '" style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 12px;border:1px solid var(--line);border-radius:11px;margin-bottom:7px;cursor:pointer' + (e.paidByUser ? ';background:#f7f2fb' : '') + '">' +
+      '<div style="min-width:0"><b style="font-size:14px">' + esc(e.place || "Gasolinera") + '</b>' + paidTag + '<div style="font-size:12px;color:var(--muted)">' + e.date + (admin ? " · " + esc(e.user) : "") + (e.plate ? " · " + esc(e.plate) : "") + typeTag + '</div></div>' +
+      '<div style="text-align:right;white-space:nowrap"><div style="font-family:var(--mono);font-weight:700">' + (e.litres != null ? fmt(e.litres, 2) + " L" : "") + '</div><div style="font-size:12px;color:var(--muted)">' + (e.amount ? eur(e.amount) : "") + '</div></div></div>';
   }
   function kmReadRow(r) {
     return '<div class="readrow" data-id="' + r.id + '" style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 12px;border:1px solid var(--line);border-radius:11px;margin-bottom:7px;cursor:pointer">' +
@@ -1399,7 +1426,7 @@
     if (!el("kmFuelList")) return;
     var scope = scopeUsers();
     function inRange(d) { return (!km.from || d >= km.from) && (!km.to || d <= km.to); }
-    var fuel = entries.filter(function (e) { return e.cat === "combustible" && scope.indexOf(e.userId) >= 0 && (!km.plate || (e.plate || "") === km.plate) && inRange(e.date); }).slice().sort(function (a, b) { return a.date < b.date ? 1 : -1; });
+    var fuel = entries.filter(function (e) { return isFuel(e) && scope.indexOf(e.userId) >= 0 && (!km.plate || (e.plate || "") === km.plate) && inRange(e.date); }).slice().sort(function (a, b) { return a.date < b.date ? 1 : -1; });
     el("kmFuelList").innerHTML = '<label style="display:block;font-size:12px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--muted);margin:4px 0 6px">Repostatges <span>(' + fuel.length + ')</span></label>' +
       (fuel.length ? fuel.slice(0, 120).map(kmFuelRow).join("") : '<p style="font-size:13px;color:var(--muted);margin:0 0 8px">Cap repostatge.</p>');
     el("kmFuelList").querySelectorAll(".fuelrow").forEach(function (r) { r.onclick = function () { openSheet(r.getAttribute("data-id")); }; });
@@ -1485,8 +1512,9 @@
     var lects = readings.filter(function (r) { return scope.indexOf(r.userId) >= 0 && (!km.plate || (r.plate || "") === km.plate); }).slice().sort(function (a, c) { return a.date < c.date ? -1 : 1; }).map(function (r) { return [monthLabel(r.ym), r.date, r.user, r.plate || "", r.km != null ? Number(r.km) : ""]; });
     xlsxFlatSheet(ctx, "Lectures km", ["Mes", "Data", "Usuari", "Matrícula", "Km"], [20, 14, 26, 16, 12], lects, null, null, false, false);
 
-    var det = fuelInRange(scope, b.from, b.to).slice().sort(function (a, c) { return a.date < c.date ? -1 : 1; }).map(function (e) { return [e.date, e.user, e.plate || "", e.place || "", e.litres != null ? Number(e.litres) : "", Number(e.amount)]; });
-    xlsxFlatSheet(ctx, "Repostatges", ["Data", "Usuari", "Matrícula", "Gasolinera", "Litres", "Import"], [13, 24, 16, 42, 12, 14], det, 6, null, false, false);
+    var detFuel = fuelInRange(scope, b.from, b.to).slice().sort(function (a, c) { return a.date < c.date ? -1 : 1; });
+    var det = detFuel.map(function (e) { return [e.date, e.user, e.plate || "", fuelTypeOf(e) === "adblue" ? "AdBlue" : "Gasoil", e.place || "", e.litres != null ? Number(e.litres) : "", e.amount ? Number(e.amount) : "", e.paidByUser ? "Usuari" : "Empresa"]; });
+    xlsxFlatSheet(ctx, "Repostatges", ["Data", "Usuari", "Matrícula", "Tipus", "Gasolinera", "Litres", "Import", "Pagat per"], [13, 22, 16, 12, 40, 12, 14, 12], det, 7, null, false, false, detFuel.map(function (e) { return e.paidByUser ? "violet" : null; }));
 
     var used = { "resum mensual": 1, "per usuari": 1, "lectures km": 1, "repostatges": 1 };
     scope.forEach(function (uid) {
@@ -1497,7 +1525,7 @@
       pl.sort().forEach(function (p) {
         var list = uf.filter(function (e) { return (e.plate || "") === p; }).slice().sort(function (a, c) { return a.date < c.date ? -1 : 1; });
         var d = distanceForUserPlate(uid, p, b.from, addDay(b.to, 1)), lit = litresSum(list), cost = costSum(list);
-        if (list.length || d > 0) groups.push({ label: p, km: d, litres: lit, cost: cost, rows: list.map(function (e) { return [e.date, e.place || "", e.litres != null ? Number(e.litres) : "", Number(e.amount)]; }) });
+        if (list.length || d > 0) groups.push({ label: p, km: d, litres: lit, cost: cost, rows: list.map(function (e) { return { cells: [e.date, fuelTypeOf(e) === "adblue" ? "AdBlue" : "Gasoil", e.place || "", e.litres != null ? Number(e.litres) : "", e.amount ? Number(e.amount) : "", e.paidByUser ? "Usuari" : "Empresa"], paid: !!e.paidByUser }; }) });
       });
       if (groups.length) xlsxKmUserSheet(ctx, safeSheet(userName(uid), used), "Combustible\n" + userName(uid), groups);
     });
@@ -1506,7 +1534,7 @@
     dlBlob(new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), "km-combustible.xlsx");
   }
   function buildKmXlsxPlain(scope, b) {
-    var det = [["Data", "Usuari", "Matrícula", "Gasolinera", "Litres", "Import"]].concat(fuelInRange(scope, b.from, b.to).slice().sort(function (a, c) { return a.date < c.date ? -1 : 1; }).map(function (e) { return [e.date, e.user, e.plate || "", e.place || "", e.litres != null ? Number(e.litres) : "", Number(e.amount)]; }));
+    var det = [["Data", "Usuari", "Matrícula", "Tipus", "Gasolinera", "Litres", "Import", "Pagat per"]].concat(fuelInRange(scope, b.from, b.to).slice().sort(function (a, c) { return a.date < c.date ? -1 : 1; }).map(function (e) { return [e.date, e.user, e.plate || "", fuelTypeOf(e) === "adblue" ? "AdBlue" : "Gasoil", e.place || "", e.litres != null ? Number(e.litres) : "", e.amount ? Number(e.amount) : "", e.paidByUser ? "Usuari" : "Empresa"]; }));
     var mens = [["Mes", "Km", "Litres", "Consum (L/100km)", "Cost (€)"]];
     monthlyRows().forEach(function (r) { mens.push([monthLabel(r.ym) + (r.estimated ? " (~)" : ""), Number(r.dist.toFixed(0)), Number(r.litres.toFixed(2)), Number(r.avg.toFixed(2)), Number(r.cost.toFixed(2))]); });
     var t = totalsFor(scope); mens.push(["TOTAL", Number(t.dist.toFixed(0)), Number(t.litres.toFixed(2)), Number(t.avg.toFixed(2)), Number(t.cost.toFixed(2))]);

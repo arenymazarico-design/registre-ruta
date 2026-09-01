@@ -1,7 +1,7 @@
 // Service worker: els fitxers principals (html/js/manifest) van SEMPRE directes de
 // la xarxa (mai es guarden en cau), així no es queda mai una versió antiga.
 // Només es guarden en cau les icones/imatges com a reserva sense connexió.
-const CACHE = 'registre-cache-v59';
+const CACHE = 'registre-cache-v61';
 const CORE = ['/icons/icon-192.png', '/icons/icon-512.png'];
 
 self.addEventListener('install', (e) => {

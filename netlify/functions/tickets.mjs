@@ -34,6 +34,8 @@ function rowToClient(r) {
     plate: r.plate || '',
     lateMonth: r.late_month || '',
     compFlag: !!r.comp_flag,
+    fuelType: r.fuel_type || '',
+    paidByUser: !!r.paid_by_user,
     origDate: r.orig_date ? (r.orig_date instanceof Date ? r.orig_date.toISOString().slice(0, 10) : String(r.orig_date).slice(0, 10)) : '',
     photo: r.photo_url || null, accounted: !!r.accounted,
     createdAt: r.created_at ? new Date(r.created_at).getTime() : 0
@@ -86,12 +88,13 @@ export default async (req) => {
       {
         const place = (b.place || '').trim();
         const num = (b.ticket_no || '').trim();
-        const isFuel = (b.cat === 'combustible');
+        const isFuel = (b.cat === 'combustible') || (b.fuelType && String(b.fuelType) !== '');
         const plate = (b.plate || '').trim().toUpperCase();
         if (isFuel && !num) {
           if (place && plate) {
             const dups = await sql`select user_name, date, place, ticket_no from tickets
-              where date = ${b.date} and cat = 'combustible'
+              where date = ${b.date}
+              and (cat = 'combustible' or coalesce(fuel_type,'') <> '')
               and lower(coalesce(place,'')) = lower(${place})
               and coalesce(ticket_no,'') = ''
               and upper(coalesce(plate,'')) = ${plate}
@@ -128,13 +131,17 @@ export default async (req) => {
       const id = uid();
       let photoUrl = null, photoBytes = null;
       if (b.photoBase64) { await photos().set(id, b.photoBase64); photoUrl = '/api/photo?id=' + id; photoBytes = b.photoBase64.length; }
-      const litresIn = (b.cat === 'combustible' && b.litres !== '' && b.litres != null && !isNaN(Number(b.litres))) ? Number(b.litres) : null;
-      const kmIn = (b.cat === 'combustible' && b.km !== '' && b.km != null && !isNaN(Number(b.km))) ? Number(b.km) : null;
+      const fuelType = ['gasoil', 'adblue'].includes(String(b.fuelType || '').toLowerCase()) ? String(b.fuelType).toLowerCase() : '';
+      const isFuel = (b.cat === 'combustible') || fuelType !== '';
+      const paidByUser = !!b.paidByUser;
+      const litresIn = (isFuel && b.litres !== '' && b.litres != null && !isNaN(Number(b.litres))) ? Number(b.litres) : null;
+      const kmIn = null;
+      const amountIn = (b.amount === '' || b.amount == null || isNaN(Number(b.amount))) ? 0 : Number(b.amount);
       const au = (await sql`select active_plate from users where id=${me.uid}`)[0] || {};
       const plateIn = (b.plate !== undefined && b.plate !== null) ? String(b.plate).trim().toUpperCase() : (au.active_plate || '').trim().toUpperCase();
-      await sql`insert into tickets (id,user_id,user_name,cat,amount,ticket_no,place,cif,date,companions,notes,photo_url,litres,km,plate,comp_flag,photo_bytes)
-        values (${id},${me.uid},${me.name},${b.cat},${Number(b.amount)},${b.ticket_no || ''},${b.place || ''},${b.cif || ''},
-        ${b.date},${b.cat === 'dietes' ? (b.companions || '') : ''},${b.notes || ''},${photoUrl},${litresIn},${kmIn},${plateIn},${compFlag},${photoBytes})`;
+      await sql`insert into tickets (id,user_id,user_name,cat,amount,ticket_no,place,cif,date,companions,notes,photo_url,litres,km,plate,comp_flag,photo_bytes,fuel_type,paid_by_user)
+        values (${id},${me.uid},${me.name},${b.cat},${amountIn},${b.ticket_no || ''},${b.place || ''},${b.cif || ''},
+        ${b.date},${b.cat === 'dietes' ? (b.companions || '') : ''},${b.notes || ''},${photoUrl},${litresIn},${kmIn},${plateIn},${compFlag},${photoBytes},${fuelType},${paidByUser})`;
 
       // enviament automàtic (amb motiu si no s'envia)
       const cfg = (await sql`select email from app_config where id=1`)[0] || {};
@@ -217,12 +224,16 @@ export default async (req) => {
       let photoUrl = cur.photo_url;
       let photoBytesUp = cur.photo_bytes != null ? cur.photo_bytes : null;
       if (b.photoBase64) { await photos().set(b.id, b.photoBase64); photoUrl = '/api/photo?id=' + b.id; photoBytesUp = b.photoBase64.length; }
-      const litresUp = (b.cat === 'combustible' && b.litres !== '' && b.litres != null && !isNaN(Number(b.litres))) ? Number(b.litres) : null;
-      const kmUp = (b.cat === 'combustible' && b.km !== '' && b.km != null && !isNaN(Number(b.km))) ? Number(b.km) : null;
+      const fuelTypeU = ['gasoil', 'adblue'].includes(String(b.fuelType || '').toLowerCase()) ? String(b.fuelType).toLowerCase() : '';
+      const isFuelU = (b.cat === 'combustible') || fuelTypeU !== '';
+      const paidByUserU = !!b.paidByUser;
+      const litresUp = (isFuelU && b.litres !== '' && b.litres != null && !isNaN(Number(b.litres))) ? Number(b.litres) : null;
+      const kmUp = null;
+      const amountUp = (b.amount === '' || b.amount == null || isNaN(Number(b.amount))) ? 0 : Number(b.amount);
       const plateUp = (b.plate !== undefined && b.plate !== null) ? String(b.plate).trim().toUpperCase() : (cur.plate || '');
-      await sql`update tickets set cat=${b.cat}, amount=${Number(b.amount)}, ticket_no=${b.ticket_no || ''},
+      await sql`update tickets set cat=${b.cat}, amount=${amountUp}, ticket_no=${b.ticket_no || ''},
         place=${b.place || ''}, cif=${b.cif || ''}, date=${b.date}, companions=${b.cat === 'dietes' ? (b.companions || '') : ''},
-        notes=${b.notes || ''}, photo_url=${photoUrl}, litres=${litresUp}, km=${kmUp}, plate=${plateUp}, comp_flag=${compFlagUp}, photo_bytes=${photoBytesUp} where id=${b.id}`;
+        notes=${b.notes || ''}, photo_url=${photoUrl}, litres=${litresUp}, km=${kmUp}, plate=${plateUp}, comp_flag=${compFlagUp}, photo_bytes=${photoBytesUp}, fuel_type=${fuelTypeU}, paid_by_user=${paidByUserU} where id=${b.id}`;
       return json({ ok: true, id: b.id });
     }
 

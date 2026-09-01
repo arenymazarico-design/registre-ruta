@@ -5,8 +5,10 @@ const PROMPT =
   "Respon NOMÉS amb un objecte JSON, sense text ni marques de codi, amb aquestes claus: " +
   '{"date":"YYYY-MM-DD" o null,"ticket_number":string o null,"invoice_number":string o null,' +
   '"cif":string o null,"is_invoice":boolean,"amount":number (total a pagar, decimal amb punt) o null,"litres":number o null,' +
+  '"fuel_type":un de "gasoil","adblue" o null,' +
   '"business_name":string o null,"category":un de "dietes","gastos","bascules","peatges","combustible" o null}. ' +
   "Si és un tiquet de benzinera/gasoil, category=combustible i omple litres amb els litres repostats. " +
+  "fuel_type: si al document hi apareix AdBlue (o \"Ad-Blue\", \"AUS32\", \"urea\"), posa \"adblue\"; si és un repostatge de gasoil/dièsel/gasolina, posa \"gasoil\"; en qualsevol altre cas null. " +
   "Sobre factura vs tiquet: NOMÉS és una factura (is_invoice=true) si al document hi apareix EXACTAMENT el CIF de referència de l'empresa que t'indico; en aquest cas omple invoice_number i posa cif amb aquest CIF. " +
   "Si no t'indico cap CIF de referència, o si aquest CIF NO apareix al document, aleshores is_invoice=false, cif=null i omple ticket_number. " +
   "Dates en format dia/mes/any i decimals amb coma. Retorna com a amount el TOTAL final. " +

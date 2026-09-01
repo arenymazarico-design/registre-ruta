@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD: estat-sistema · 2025-07-03 -->
+<!-- BUILD: adblue-auto · 2025-07-03 -->
 <html lang="ca">
 <head>
 <meta charset="utf-8">
@@ -281,9 +281,12 @@
       </div>
       <div class="field"><label for="place" id="placeLbl">Restaurant o empresa</label><input id="place" type="text" autocomplete="off" placeholder="Nom del comerç"></div>
       <div id="fuelWrap" style="display:none">
-        <div class="field"><label for="litres">Litres (gasoil)</label><input id="litres" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0"></div>
+        <div class="modetoggle" id="fuelTypeToggle" style="margin-bottom:12px"><button type="button" class="mbtn" data-ft="gasoil">Gasoil</button><button type="button" class="mbtn" data-ft="adblue">AdBlue</button></div>
+        <div class="field"><label for="litres">Litres</label><input id="litres" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0"></div>
         <div class="field"><label for="fuelPlate">Matrícula</label><input id="fuelPlate" type="text" list="platesList" autocomplete="off" placeholder="Matrícula" style="text-transform:uppercase"></div>
         <datalist id="platesList"></datalist>
+        <label style="display:flex;align-items:center;gap:9px;font-size:15px;font-weight:600;margin:2px 0 6px;cursor:pointer"><input type="checkbox" id="paidByUser" style="width:20px;height:20px"> Ho ha pagat l'usuari</label>
+        <p style="font-size:12px;color:var(--muted);margin:0 0 6px">Per defecte ho paga l'empresa. Si ho marca, el tiquet passa a Gastos (per reemborsar), però els litres segueixen comptant per al consum.</p>
       </div>
       <div class="field" id="compWrap" style="display:none">
         <label for="compCount">Acompanyants (nombre de persones)</label>
