@@ -67,6 +67,8 @@ export async function ensure() {
   await sql`alter table app_config add column if not exists names text default ''`;
   await sql`alter table app_config add column if not exists menu_max numeric(10,2) default 0`;
   await sql`alter table app_config add column if not exists blocked_places text default ''`;
+  await sql`alter table app_config add column if not exists announce_msg text default ''`;
+  await sql`alter table app_config add column if not exists announce_id text default ''`;
   await sql`insert into app_config (id) values (1) on conflict (id) do nothing`;
   ensured = true;
 }

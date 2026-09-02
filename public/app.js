@@ -10,7 +10,7 @@
   };
   var CAT_KEYS = Object.keys(CATS);
   var EXPENSE_KEYS = CAT_KEYS.filter(function (k) { return k !== "combustible"; });
-  var APP_VERSION = "2025-07-03 · restaurants-bloquejats";
+  var APP_VERSION = "2025-07-03 · avis-usuaris";
 
   // ---------- Idioma (català per defecte / castellà) ----------
   var lang = localStorage.getItem("lang") || "ca";
@@ -118,6 +118,7 @@
     "Km actuals del comptador": "Km actuales del cuentakilómetros",
     "Acompanyant repetit": "Acompañante repetido",
     "Filtra per dates": "Filtra por fechas",
+    "Missatge/avís per a tots els usuaris": "Mensaje/aviso para todos los usuarios", "Avís": "Aviso", "D'acord": "De acuerdo",
     "Restaurants que facturen a final de mes (bloquejats)": "Restaurantes que facturan a final de mes (bloqueados)",
     "Ho ha pagat l'usuari": "Lo ha pagado el usuario", "Gasoil": "Gasoil", "AdBlue": "AdBlue",
     "Per defecte ho paga l'empresa. Si ho marca, el tiquet passa a Gastos (per reemborsar), però els litres segueixen comptant per al consum.": "Por defecto lo paga la empresa. Si lo marca, el ticket pasa a Gastos (para reembolsar), pero los litros siguen contando para el consumo.",
@@ -249,6 +250,7 @@
     var bp = [];
     if (c.blockedPlaces) { try { bp = JSON.parse(c.blockedPlaces); } catch (e) { bp = String(c.blockedPlaces).split(/[\n,;]+/); } }
     cfg.blockedPlaces = (bp || []).map(function (x) { return String(x).trim(); }).filter(Boolean);
+    cfg.announceMsg = c.announceMsg || ""; cfg.announceId = c.announceId || "";
     var names = [];
     if (c.names) { try { names = JSON.parse(c.names); } catch (e) { names = String(c.names).split(/[\n,;]+/); } }
     cfg.names = (names || []).map(function (x) { return String(x).trim(); }).filter(Boolean);
@@ -329,7 +331,7 @@
       var lg = await api("/api/login", "POST", { name: name, pin: pin });
       me = lg.user; setSession(lg.token, me); filter = "tots"; userFilter = "tots";
       normalizeCfg(await api("/api/config")); applyTheme(); await loadRoster(); fillNamesDatalist(); await loadEntries(); await loadReadings();
-      render(); toast("Hola, " + me.name.split(" ")[0]); showKmReminder();
+      render(); toast("Hola, " + me.name.split(" ")[0]); showKmReminder(); maybeShowAnnounce();
     } catch (e) { toast(e.message); }
   }
 
@@ -448,6 +450,19 @@
     el("menuCard").querySelectorAll(".langbtn").forEach(function (b) { b.onclick = function () { setLang(b.getAttribute("data-l")); }; });
     if (lang === "es") applyLang();
   }
+  function maybeShowAnnounce() {
+    if (!cfg.announceMsg || !cfg.announceId) return;
+    try { if (localStorage.getItem("annDismissed") === cfg.announceId) return; } catch (e) { }
+    el("annBody").textContent = cfg.announceMsg;
+    el("annScrim").setAttribute("data-open", "true"); el("annSheet").setAttribute("data-open", "true");
+    if (lang === "es") applyLang();
+  }
+  function closeAnnounce() {
+    try { localStorage.setItem("annDismissed", cfg.announceId || ""); } catch (e) { }
+    el("annScrim").removeAttribute("data-open"); el("annSheet").removeAttribute("data-open");
+  }
+  el("closeAnn").onclick = closeAnnounce; el("annOk").onclick = closeAnnounce; el("annScrim").onclick = closeAnnounce;
+
   function closeMenu() { el("menu").removeAttribute("data-open"); }
 
   // ---------- Estat del sistema ----------
@@ -638,6 +653,8 @@
       '<p style="font-size:12px;color:var(--muted);margin:-4px 0 12px">A l\'Excel de consulta, per a cada dieta es divideix l\'import entre els acompanyants + la persona que l\'entra; si la mitjana per persona supera aquest import, la fila es marca en vermell. No canvia cap import. Deixa-ho a 0 per no comprovar res.</p>' +
       '<div class="field"><label for="cBlocked">Restaurants que facturen a final de mes (bloquejats)</label><textarea id="cBlocked" rows="4" placeholder="Un nom per línia">' + esc((cfg.blockedPlaces || []).join("\n")) + '</textarea></div>' +
       '<p style="font-size:12px;color:var(--muted);margin:-4px 0 14px">Si el nom del comerç d\'un tiquet coincideix amb algun d\'aquests, no es podrà desar: aquests restaurants ja envien factura a l\'empresa a final de mes.</p>' +
+      '<div class="field"><label for="cAnnounce">Missatge/avís per a tots els usuaris</label><textarea id="cAnnounce" rows="4" placeholder="Deixa-ho buit per no mostrar cap avís">' + esc(cfg.announceMsg || "") + '</textarea></div>' +
+      '<p style="font-size:12px;color:var(--muted);margin:-4px 0 14px">Es mostrarà a tots els usuaris en entrar a l\'app (un sol cop, fins que el tanquin). Cada cop que el canviïs, es tornarà a mostrar. Deixa\'l buit per treure\'l.</p>' +
       '<label style="display:block;font-size:12px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--muted);margin-bottom:6px">Color de l\'app</label>' +
       '<div class="swatches">' + swatches + '<input id="cColor" type="color" value="' + esc(cfgColorTmp) + '" style="width:40px;height:34px;border:1px solid var(--line);border-radius:8px;background:none;cursor:pointer;padding:2px"></div>' +
       '<label style="display:block;font-size:12px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--muted);margin:2px 0 6px">Logo</label>' +
@@ -687,9 +704,11 @@
     cfg.cif = el("cCif").value.trim();
     var mm = parseFloat(el("cMenuMax").value); cfg.menuMax = (!isNaN(mm) && mm > 0) ? mm : 0;
     cfg.blockedPlaces = el("cBlocked").value.split("\n").map(function (x) { return x.trim(); }).filter(Boolean);
+    var annMsg = el("cAnnounce").value.trim();
     cfg.names = el("cNames").value.split("\n").map(function (x) { return x.trim(); }).filter(Boolean);
     try {
-      await api("/api/config", "POST", { email: cfg.email, color: cfg.color, logo: cfg.logo, cif: cfg.cif, names: JSON.stringify(cfg.names), menuMax: cfg.menuMax, blockedPlaces: JSON.stringify(cfg.blockedPlaces) });
+      await api("/api/config", "POST", { email: cfg.email, color: cfg.color, logo: cfg.logo, cif: cfg.cif, names: JSON.stringify(cfg.names), menuMax: cfg.menuMax, blockedPlaces: JSON.stringify(cfg.blockedPlaces), announceMsg: annMsg });
+      try { var fresh = await api("/api/config", "GET"); normalizeCfg(fresh); } catch (e) { }
       applyTheme(); fillNamesDatalist(); closeCfg(); render(); toast("Configuració desada");
     } catch (e) { toast(e.message); }
   }
@@ -1784,6 +1803,6 @@
     }
     render();
     if (lang === "es") applyLang();
-    if (me) showKmReminder();
+    if (me) { showKmReminder(); maybeShowAnnounce(); }
   })();
 })();
